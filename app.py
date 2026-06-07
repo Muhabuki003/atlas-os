@@ -653,6 +653,10 @@ app.include_router(setup_compare_routes(session_manager))
 from routes.prefs_routes import setup_prefs_routes
 app.include_router(setup_prefs_routes())
 
+# Atlas OS — identity, profile, projects, agents, briefing
+from routes.atlas_routes import setup_atlas_routes
+app.include_router(setup_atlas_routes())
+
 # Backup (export/import user data)
 from routes.backup_routes import setup_backup_routes
 app.include_router(setup_backup_routes(memory_manager, preset_manager, skills_manager))
@@ -730,6 +734,26 @@ def _serve_html_with_nonce(request: Request, file_path: str) -> HTMLResponse:
     nonce = getattr(request.state, "csp_nonce", "")
     html = html.replace("{{CSP_NONCE}}", nonce)
     return HTMLResponse(html)
+
+@app.get("/home")
+async def serve_home(request: Request):
+    return await serve_index(request)
+
+@app.get("/assistant")
+async def serve_assistant(request: Request):
+    return await serve_index(request)
+
+@app.get("/agents")
+async def serve_agents(request: Request):
+    return await serve_index(request)
+
+@app.get("/projects")
+async def serve_projects(request: Request):
+    return await serve_index(request)
+
+@app.get("/finance")
+async def serve_finance(request: Request):
+    return await serve_index(request)
 
 @app.get("/")
 async def serve_index(request: Request):
@@ -843,6 +867,11 @@ app.router.lifespan_context = _lifespan
 async def _startup_event():
     global upload_cleanup_task
     logger.info("Application starting up...")
+    try:
+        from src.atlas_mount_workspace import startup_bootstrap
+        startup_bootstrap()
+    except Exception as e:
+        logger.warning("Atlas workspace bootstrap skipped: %s", e)
     webhook_manager.set_loop(asyncio.get_running_loop())
     # Wipe any leftover incognito sessions from previous process — they're
     # ephemeral by design and must not survive a restart.

@@ -194,6 +194,16 @@ class ChatProcessor:
                 })
             except Exception:
                 logger.debug("Failed to add current date/time context", exc_info=True)
+        try:
+            from src.atlas_config import build_atlas_system_context
+            _atlas_ctx = build_atlas_system_context()
+            if _atlas_ctx:
+                preface.append({
+                    "role": "system",
+                    "content": _atlas_ctx,
+                })
+        except Exception:
+            logger.debug("Failed to add Atlas OS context", exc_info=True)
         preface.append({
             "role": "system",
             "content": UNTRUSTED_CONTEXT_POLICY,

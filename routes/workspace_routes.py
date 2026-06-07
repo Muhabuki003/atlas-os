@@ -2,6 +2,9 @@
 import os
 from fastapi import APIRouter, Request, HTTPException, Query
 
+from src.atlas_config import data_dir
+from src.atlas_mount_workspace import NOT_MOUNTED_WARNING, container_root, is_mounted
+from src.atlas_workspace import load_workspace
 from src.auth_helpers import get_current_user
 from src.tool_security import owner_is_admin_or_single_user
 
@@ -23,11 +26,34 @@ def setup_workspace_routes():
         if not owner_is_admin_or_single_user(owner):
             raise HTTPException(status_code=403, detail="Workspace browsing is admin-only")
 
+        ws = load_workspace(data_dir())
+        docker_mode = (ws.get("workspace_mode") or "docker_mount") == "docker_mount"
+        raw = path.strip()
+
+        if docker_mode:
+            if not is_mounted():
+                return {
+                    "path": "",
+                    "parent": None,
+                    "dirs": [],
+                    "warning": NOT_MOUNTED_WARNING,
+                }
+            default_start = ws.get("workspace_container_root") or container_root()
+            if not raw:
+                raw = default_start
+            elif raw in ("~", "/app", "/app/"):
+                raw = default_start
+
         # Resolve symlinks so the reported path is canonical and the UI navigates
         # real directories (defends against symlink games in displayed paths).
-        target = os.path.realpath(os.path.expanduser(path.strip() or "~"))
+        target = os.path.realpath(os.path.expanduser(raw or "~"))
+        if docker_mode and not target.startswith(os.path.realpath(container_root())):
+            target = os.path.realpath(container_root())
         if not os.path.isdir(target):
-            target = os.path.realpath(os.path.expanduser("~"))
+            if docker_mode and is_mounted():
+                target = os.path.realpath(container_root())
+            else:
+                target = os.path.realpath(os.path.expanduser("~"))
 
         dirs = []
         try:

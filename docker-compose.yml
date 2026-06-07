@@ -6,6 +6,8 @@ services:
     volumes:
       - ./data:/app/data:z
       - ./logs:/app/logs:z
+      # Atlas Workspace — host project folders (Windows: C:\AtlasWorkspace)
+      - C:\AtlasWorkspace:/workspace:z
       # Cookbook remote-server SSH identity. Odysseus can generate a key here;
       # add the shown public key to each remote server's authorized_keys.
       - ./data/ssh:/app/.ssh:z
@@ -62,6 +64,9 @@ services:
       # Find yours with:  id -u  /  id -g
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
+      # Atlas mounted workspace — host path is for UI hints; container reads /workspace
+      - ATLAS_WORKSPACE_HOST=${ATLAS_WORKSPACE_HOST:-C:\AtlasWorkspace}
+      - ATLAS_WORKSPACE_CONTAINER=${ATLAS_WORKSPACE_CONTAINER:-/workspace}
     depends_on:
       searxng:
         condition: service_healthy

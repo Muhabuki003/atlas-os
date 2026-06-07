@@ -14,6 +14,7 @@ const API_BASE = window.location.origin;
 const _FOLDER_SVG = '<svg class="workspace-row-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 let _modal = null;
 let _curPath = '';
+let _onSelectCallback = null;
 
 export function getWorkspace() {
   return Storage.get(KEYS.WORKSPACE, '') || '';
@@ -56,7 +57,11 @@ async function _load(path) {
   const url = `${API_BASE}/api/workspace/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`;
   const res = await fetch(url, { credentials: 'same-origin' });
   if (!res.ok) throw new Error(`browse failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (data.warning) {
+    if (uiModule && uiModule.showToast) uiModule.showToast(data.warning);
+  }
+  return data;
 }
 
 function _render(data) {
@@ -124,8 +129,16 @@ function _getModal() {
     }
   });
   _modal.querySelector('#workspace-use').addEventListener('click', () => {
-    setWorkspace(_curPath);
-    if (uiModule && uiModule.showToast) uiModule.showToast(`Workspace set: ${_basename(_curPath)}`);
+    const path = _curPath;
+    const cb = _onSelectCallback;
+    _onSelectCallback = null;
+    if (cb) {
+      cb(path);
+      if (uiModule && uiModule.showToast) uiModule.showToast(`Folder selected: ${_basename(path)}`);
+    } else {
+      setWorkspace(path);
+      if (uiModule && uiModule.showToast) uiModule.showToast(`Workspace set: ${_basename(path)}`);
+    }
     closeWorkspaceBrowser();
   });
   const content = _modal.querySelector('.modal-content');
@@ -134,17 +147,24 @@ function _getModal() {
   return _modal;
 }
 
-export async function openWorkspaceBrowser() {
+/**
+ * Open server folder browser. Pass onSelect(path) to use a path without
+ * persisting it as the chat workspace (e.g. Atlas Projects master folder).
+ */
+export async function openWorkspaceBrowser(options = {}) {
+  _onSelectCallback = typeof options.onSelect === 'function' ? options.onSelect : null;
   const modal = _getModal();
   modal.style.display = 'flex';
+  const start = options.startPath || getWorkspace() || '';
   try {
-    _render(await _load(getWorkspace() || ''));
+    _render(await _load(start));
   } catch (e) {
     if (uiModule && uiModule.showError) uiModule.showError('Could not browse folders');
   }
 }
 
 export function closeWorkspaceBrowser() {
+  _onSelectCallback = null;
   if (_modal) _modal.style.display = 'none';
 }
 

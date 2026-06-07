@@ -1,0 +1,69 @@
+{
+  "agents": [
+    {
+      "id": "developer",
+      "name": "Developer Agent",
+      "role": "Reviews code, fixes bugs, writes implementation plans, prepares Cursor prompts.",
+      "department": "Engineering",
+      "status": "ready",
+      "current_task": "Standing by for Houseify codebase review",
+      "last_report": "No recent report — last sync 2h ago",
+      "waiting_on": null,
+      "last_run_at": null,
+      "report_history": [],
+      "can_run": true
+    },
+    {
+      "id": "architect",
+      "name": "Architect Agent",
+      "role": "Designs systems, routes, database structure, workflows, and feature specs.",
+      "department": "Architecture",
+      "status": "ready",
+      "current_task": "TransportOS workflow mapping",
+      "last_report": "Drafted service boundary diagram for TransportOS",
+      "waiting_on": null,
+      "last_run_at": null,
+      "report_history": [],
+      "can_run": true
+    },
+    {
+      "id": "research",
+      "name": "Research Agent",
+      "role": "Researches competitors, trends, APIs, technical approaches, and business/app ideas.",
+      "department": "Research",
+      "status": "idle",
+      "current_task": null,
+      "last_report": "Competitor scan: property platform UX patterns",
+      "waiting_on": null,
+      "last_run_at": null,
+      "report_history": [],
+      "can_run": true
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing Agent",
+      "role": "Creates content ideas, positioning, ads, landing page copy, and launch strategy.",
+      "department": "Marketing",
+      "status": "waiting",
+      "current_task": "Houseify launch messaging draft",
+      "last_report": "Submitted headline variants for review",
+      "waiting_on": "User approval on positioning",
+      "last_run_at": null,
+      "report_history": [],
+      "can_run": true
+    },
+    {
+      "id": "business",
+      "name": "Business Agent",
+      "role": "Helps with monetisation, priorities, pricing, business strategy, and daily focus.",
+      "department": "Strategy",
+      "status": "idle",
+      "current_task": null,
+      "last_report": "Weekly priority brief: Houseify + TransportOS",
+      "waiting_on": null,
+      "last_run_at": null,
+      "report_history": [],
+      "can_run": true
+    }
+  ]
+}

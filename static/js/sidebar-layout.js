@@ -92,15 +92,15 @@ export function initSidebarLayout(Storage, opts) {
     });
   }
 
-  // New chat buttons — same as clicking brand
+  // Legacy chat-new-btn only — Assistant sidebar entry is wired in app.js
+  // (hide Home + open Assistant) to avoid duplicate handlers.
   const chatNewBtn = document.getElementById('chat-new-btn');
-  const sidebarNewChat = document.getElementById('sidebar-new-chat-btn');
-  [chatNewBtn, sidebarNewChat].forEach(btn => {
-    if (btn) btn.addEventListener('click', () => {
+  if (chatNewBtn) {
+    chatNewBtn.addEventListener('click', () => {
       const brandBtn = document.getElementById('sidebar-brand-btn');
       if (brandBtn) brandBtn.click();
     });
-  });
+  }
 
   // Hamburger cycles: full sidebar → mini → off → full
   // Shift-click swaps sidebar side

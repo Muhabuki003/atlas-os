@@ -1315,7 +1315,7 @@ def setup_calendar_routes() -> APIRouter:
             lines = [
                 "BEGIN:VCALENDAR",
                 "VERSION:2.0",
-                "PRODID:-//Odysseus//Calendar//EN",
+                "PRODID:-//Atlas//Calendar//EN",
                 f"X-WR-CALNAME:{_ics_escape(cal.name)}",
             ]
             for ev in events:

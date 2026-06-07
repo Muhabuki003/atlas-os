@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Odysseus Chat</title>
+  <title>Atlas</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 4L16 22L6 22Z' fill='%23e06c75'/%3E%3Cpath d='M16 8L16 22L24 22Z' fill='%23e06c75' opacity='0.6'/%3E%3Cpath d='M4 24Q10 20 16 24Q22 28 28 24' stroke='%23e06c75' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#282c34">
@@ -150,14 +150,15 @@
       apple.href = href;
       // Also customize the page title so the bookmark inherits a useful name.
       var titles = {
-        '/calendar': 'Calendar — Odysseus',
-        '/notes': 'Notes — Odysseus',
-        '/cookbook': 'Cookbook — Odysseus',
-        '/email': 'Email — Odysseus',
-        '/memory': 'Memory — Odysseus',
-        '/gallery': 'Gallery — Odysseus',
-        '/tasks': 'Tasks — Odysseus',
-        '/library': 'Library — Odysseus',
+        '/calendar': 'Calendar — Atlas',
+        '/notes': 'Notes — Atlas',
+        '/cookbook': 'Cookbook — Atlas',
+        '/email': 'Email — Atlas',
+        '/memory': 'Memory — Atlas',
+        '/gallery': 'Gallery — Atlas',
+        '/tasks': 'Tasks — Atlas',
+        '/library': 'Library — Atlas',
+        '/home': 'Atlas OS',
       };
       if (titles[path]) document.title = titles[path];
       // Per-route Android home-screen icon. We swap the <link rel="manifest">
@@ -167,8 +168,8 @@
       try {
         if (inner && typeof Blob !== 'undefined') {
           var pwa = {
-            name: (titles[path] || 'Odysseus'),
-            short_name: (titles[path] || 'Odysseus').split('—')[0].trim(),
+            name: (titles[path] || 'Atlas'),
+            short_name: (titles[path] || 'Atlas').split('—')[0].trim(),
             start_url: path,
             scope: '/',
             display: 'standalone',
@@ -221,7 +222,7 @@
   <link rel="modulepreload" href="/static/js/markdown.js">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content, viewport-fit=cover" />
 </head>
-<body>
+<body class="atlas-os atlas-view-home">
   <!-- Loading overlay — hides all flashing until app is ready -->
   <div id="app-loader" style="position:fixed;inset:0;z-index:99999;background:var(--bg,#282c34);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;transition:opacity .3s">
     <div id="loader-wave" style="color:var(--brand-color,var(--red,#e06c75));font-family:monospace;font-size:11px;opacity:.5">▁▂▃</div>
@@ -496,7 +497,7 @@
         <div class="theme-adv-group">
           <div class="theme-adv-group-label">Sidebar</div>
           <div class="theme-custom">
-            <div class="color-row"><label>Odysseus Logo</label><input type="color" id="adv-brandColor"><button class="color-reset-btn" data-reset-adv="brandColor" title="Reset this color" aria-label="Reset color">&#x21BA;</button></div>
+            <div class="color-row"><label>Atlas Logo</label><input type="color" id="adv-brandColor"><button class="color-reset-btn" data-reset-adv="brandColor" title="Reset this color" aria-label="Reset color">&#x21BA;</button></div>
             <div class="color-row"><label title="Hamburger menu"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-2px;"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></label><input type="color" id="adv-hamburgerColor"><button class="color-reset-btn" data-reset-adv="hamburgerColor" title="Reset this color" aria-label="Reset color">&#x21BA;</button></div>
           </div>
         </div>
@@ -683,13 +684,21 @@
     <div class="sidebar-header">
       <button class="sidebar-hamburger" id="sidebar-toggle-btn" title="Toggle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <div class="sidebar-brand" id="sidebar-brand-btn" style="cursor:pointer;" title="New chat">
-        <span class="sidebar-brand-title">Odysseus</span>
+        <span class="sidebar-brand-title">Atlas</span>
       </div>
     </div>
     <div class="sidebar-inner">
-      <div class="list-item" id="sidebar-new-chat-btn" title="New chat">
+      <div class="list-item active" id="sidebar-home-btn" title="Atlas OS Home">
+        <svg class="sidebar-action-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        <span class="grow">Home</span>
+      </div>
+      <div class="list-item" id="sidebar-assistant-btn" title="Open Assistant">
+        <svg class="sidebar-action-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;left:-2px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="grow" style="position:relative;left:-3px;">Assistant</span>
+      </div>
+      <div class="list-item hidden" id="sidebar-new-chat-btn" title="Open Assistant" aria-hidden="true">
         <svg class="sidebar-action-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;left:-2px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span class="grow" style="position:relative;left:-3px;">New Chat</span>
+        <span class="grow" style="position:relative;left:-3px;">Assistant</span>
       </div>
       <div class="list-item" id="sidebar-search-btn" title="Search conversations (Ctrl+K)">
         <svg class="sidebar-action-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -930,18 +939,379 @@
     </div>
   </nav>
 
-  <main class="chat-container welcome-active" id="chat-container" aria-label="Chat area" aria-busy="false">
+  <div id="atlas-os-backdrop" class="atlas-os-backdrop" aria-hidden="true">
+    <canvas id="atlas-mc-particles" class="atlas-mc-particles"></canvas>
+    <div class="atlas-mc-bg"></div>
+    <div class="atlas-mc-scanline"></div>
+  </div>
+
+  <section id="atlas-home" class="atlas-home atlas-mc" aria-label="Atlas OS Mission Control">
+    <header class="atlas-mc-briefing-bar" id="atlas-home-briefing" aria-labelledby="atlas-home-briefing-heading">
+      <span id="atlas-home-briefing-heading" class="atlas-mc-briefing-label">Daily Briefing</span>
+      <div class="atlas-ticker" id="atlas-briefing-ticker">
+        <div class="atlas-ticker-track" id="atlas-briefing-ticker-track">
+          <p class="atlas-ticker-text atlas-home-briefing-text" id="atlas-home-briefing-text">Loading briefing…</p>
+          <p class="atlas-ticker-text atlas-ticker-clone" id="atlas-briefing-ticker-clone" aria-hidden="true"></p>
+        </div>
+      </div>
+    </header>
+
+    <div class="atlas-mc-body">
+      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Projects and focus">
+        <section class="atlas-mc-section atlas-mc-section--recent">
+          <h2 class="atlas-mc-section-title" id="atlas-home-projects-heading">Recent Projects</h2>
+          <div id="atlas-home-projects" class="atlas-home-projects atlas-home-recent-list"></div>
+        </section>
+      </aside>
+
+      <main class="atlas-mc-center">
+        <div class="atlas-mc-core-wrap" id="atlas-core" aria-hidden="true">
+          <canvas id="atlas-core-canvas" class="atlas-core-canvas"></canvas>
+        </div>
+        <h1 class="atlas-mc-title">ATLAS OS</h1>
+        <p class="atlas-mc-greeting atlas-home-greeting" id="atlas-home-greeting">Good evening Aurelius. What shall we build today?</p>
+
+        <div id="atlas-mc-chips" class="atlas-mc-chips" aria-label="Quick actions"></div>
+
+        <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
+          <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" />
+          <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </form>
+
+        <button type="button" id="atlas-mc-voice-btn" class="atlas-mc-voice" aria-label="Voice Mode" title="Open Voice Mode">
+          <span class="atlas-mc-voice-ring" aria-hidden="true"></span>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <span class="atlas-mc-voice-label">Voice Mode</span>
+        </button>
+      </main>
+
+      <aside class="atlas-mc-panel atlas-mc-panel-right" aria-labelledby="atlas-home-agents-heading">
+        <h2 class="atlas-mc-section-title" id="atlas-home-agents-heading">Agent Network</h2>
+        <div id="atlas-home-agents" class="atlas-home-agents"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="atlas-agents-office" class="atlas-agents-office hidden" aria-label="Agents Office">
+    <header class="atlas-agents-header">
+      <h1 class="atlas-agents-title">Agents Office</h1>
+      <p class="atlas-agents-subtitle">Atlas Core operations floor</p>
+    </header>
+    <div class="atlas-agents-layout">
+      <main class="atlas-agents-main" aria-label="Agent Network">
+        <h2 class="atlas-agents-network-label">Agent Network</h2>
+        <div id="atlas-agents-network" class="atlas-agents-network">
+          <canvas id="atlas-agents-lines" class="atlas-agents-lines" aria-hidden="true"></canvas>
+          <div id="atlas-agents-core-hub" class="atlas-agents-core-hub" aria-hidden="true">
+            <span class="atlas-agents-core-ring"></span>
+            <span class="atlas-agents-core-label">Atlas Core</span>
+          </div>
+          <div id="atlas-agents-pods" class="atlas-agents-pods"></div>
+        </div>
+      </main>
+      <aside class="atlas-agents-reports" aria-label="Reports Queue">
+        <h2 class="atlas-agents-reports-title">Reports Queue</h2>
+        <section class="atlas-agents-reports-section">
+          <h3 class="atlas-agents-reports-heading">Pending Reports</h3>
+          <ul id="atlas-reports-pending" class="atlas-agents-reports-list"></ul>
+        </section>
+        <section class="atlas-agents-reports-section">
+          <h3 class="atlas-agents-reports-heading">Waiting for Approval</h3>
+          <ul id="atlas-reports-approval" class="atlas-agents-reports-list"></ul>
+        </section>
+        <section class="atlas-agents-reports-section">
+          <h3 class="atlas-agents-reports-heading">Completed Today</h3>
+          <ul id="atlas-reports-completed" class="atlas-agents-reports-list"></ul>
+        </section>
+      </aside>
+    </div>
+    <section id="atlas-pipeline-section" class="atlas-pipeline-section" aria-label="Agent Workflow Pipeline">
+      <h2 class="atlas-pipeline-title">Workflow Pipeline</h2>
+      <div id="atlas-pipeline-flow" class="atlas-pipeline-flow"></div>
+      <div id="atlas-pipeline-items" class="atlas-pipeline-items"></div>
+    </section>
+    <footer id="atlas-agents-controls" class="atlas-agents-controls" aria-label="Agent Controls"></footer>
+  </section>
+
+  <section id="atlas-projects-panel" class="atlas-os-panel hidden" aria-label="Projects">
+    <header class="atlas-os-panel-header">
+      <h1 class="atlas-os-panel-title">Projects</h1>
+      <p class="atlas-os-panel-subtitle">Workspace Sync — discover and index project folders read-only</p>
+    </header>
+    <section class="atlas-workspace-bar" id="atlas-workspace-bar">
+      <header class="atlas-workspace-header">
+        <h2 class="atlas-workspace-title">Atlas Workspace</h2>
+        <span class="atlas-workspace-mount-badge" id="atlas-workspace-mount-badge">Checking…</span>
+      </header>
+      <div class="atlas-workspace-status-grid">
+        <div class="atlas-workspace-status-item">
+          <span class="atlas-workspace-status-label">Host folder (Windows)</span>
+          <code class="atlas-workspace-status-value" id="atlas-workspace-host-hint">C:\AtlasWorkspace</code>
+        </div>
+        <div class="atlas-workspace-status-item">
+          <span class="atlas-workspace-status-label">Container path</span>
+          <code class="atlas-workspace-status-value" id="atlas-workspace-container-root">/workspace</code>
+        </div>
+        <div class="atlas-workspace-status-item">
+          <span class="atlas-workspace-status-label">Projects folder</span>
+          <code class="atlas-workspace-status-value" id="atlas-workspace-projects-folder">/workspace/Projects</code>
+        </div>
+      </div>
+      <p class="atlas-workspace-warning hidden" id="atlas-workspace-warning"></p>
+      <div class="atlas-workspace-fields">
+        <label class="atlas-workspace-toggle">
+          <input type="checkbox" id="atlas-workspace-auto-discover" checked /> Auto-discover projects after scan
+        </label>
+        <label class="atlas-workspace-toggle">
+          <input type="checkbox" id="atlas-workspace-auto-index" /> Auto-index discovered projects after scan
+        </label>
+      </div>
+      <div class="atlas-workspace-actions">
+        <button type="button" id="atlas-workspace-bootstrap" class="atlas-project-btn">Create Workspace Folders</button>
+        <button type="button" id="atlas-workspace-scan" class="atlas-project-btn atlas-project-btn--primary">Scan Projects</button>
+        <button type="button" id="atlas-workspace-index-all" class="atlas-project-btn">Index All</button>
+        <button type="button" id="atlas-workspace-setup" class="atlas-project-btn">Open Setup Instructions</button>
+        <button type="button" id="atlas-workspace-browse" class="atlas-project-btn" title="Browse /workspace in container">Browse</button>
+        <button type="button" id="atlas-workspace-save" class="atlas-project-btn hidden">Save Settings</button>
+        <button type="button" id="atlas-projects-add-btn" class="atlas-project-btn">+ Add Manual</button>
+      </div>
+      <input type="hidden" id="atlas-workspace-root" value="/workspace/Projects" />
+      <p class="atlas-workspace-meta" id="atlas-workspace-meta">Last scan: never</p>
+      <p class="atlas-workspace-discovered" id="atlas-workspace-discovered"></p>
+    </section>
+    <div class="atlas-projects-layout">
+      <div id="atlas-projects-grid" class="atlas-projects-grid"></div>
+      <aside class="atlas-projects-side">
+        <section class="atlas-projects-side-block" id="atlas-projects-detail">
+          <h3 id="atlas-projects-detail-name">Project Detail</h3>
+          <div id="atlas-projects-detail-body" class="atlas-projects-detail-body">
+            <p class="atlas-panel-empty">Select a project.</p>
+          </div>
+          <div id="atlas-projects-detail-actions" class="atlas-projects-detail-actions hidden"></div>
+        </section>
+        <section class="atlas-projects-side-block">
+          <h3>Recent Changes</h3>
+          <div id="atlas-projects-changes" class="atlas-projects-changes"></div>
+        </section>
+      </aside>
+    </div>
+    <form id="atlas-project-form" class="atlas-project-form hidden" autocomplete="off">
+      <h3>Add / Edit Project</h3>
+      <input type="hidden" id="atlas-project-form-id" />
+      <label>Name <input type="text" id="atlas-project-form-name" required /></label>
+      <label>Container path <input type="text" id="atlas-project-form-path" placeholder="/workspace/Projects/myapp" readonly /></label>
+      <label>Description <textarea id="atlas-project-form-desc" rows="2"></textarea></label>
+      <label>Type
+        <select id="atlas-project-form-type">
+          <option>SaaS</option><option>AI Tool</option><option>Marketplace</option>
+          <option>Logistics</option><option>Property</option><option>Game</option><option>Website</option>
+        </select>
+      </label>
+      <label>Status <select id="atlas-project-form-status"><option>active</option><option>paused</option><option>archived</option></select></label>
+      <label>Priority <select id="atlas-project-form-priority"><option>high</option><option>medium</option><option>low</option></select></label>
+      <div class="atlas-project-form-actions">
+        <button type="button" id="atlas-project-form-cancel">Cancel</button>
+        <button type="submit">Save Project</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="atlas-workspace-setup-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-workspace-setup-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-atlas-setup-close></div>
+    <div class="atlas-report-modal-panel">
+      <header class="atlas-report-modal-header">
+        <h2 class="atlas-report-modal-title" id="atlas-workspace-setup-title">Atlas Workspace Setup</h2>
+        <button type="button" class="atlas-report-modal-close" data-atlas-setup-close aria-label="Close">&times;</button>
+      </header>
+      <div class="atlas-report-modal-body atlas-workspace-setup-body">
+        <ol>
+          <li>Create folder on Windows: <code>C:\AtlasWorkspace</code></li>
+          <li>Put or copy project folders into: <code>C:\AtlasWorkspace\Projects</code></li>
+          <li>Ensure <code>docker-compose.yml</code> mounts <code>C:\AtlasWorkspace:/workspace</code></li>
+          <li>Restart Docker after compose update</li>
+          <li>In Atlas Projects, click <strong>Create Workspace Folders</strong> then <strong>Scan Projects</strong></li>
+        </ol>
+        <p>Atlas scans <code>/workspace/Projects</code> inside the container — each child folder becomes a project. Project indexing is read-only; agent reports save under <code>/workspace/Agents/</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-project-context-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-pctx-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-pctx-close></div>
+    <div class="atlas-report-modal-panel atlas-pctx-panel">
+      <header class="atlas-report-modal-header">
+        <h2 class="atlas-report-modal-title" id="atlas-pctx-title">Project Context</h2>
+        <button type="button" class="atlas-report-modal-close" data-pctx-close aria-label="Close">&times;</button>
+      </header>
+      <div class="atlas-pctx-grid">
+        <p><strong>Path</strong> <span id="atlas-pctx-path"></span></p>
+        <p><strong>Stack</strong> <span id="atlas-pctx-stack"></span></p>
+        <p><strong>Files</strong> <span id="atlas-pctx-files"></span></p>
+        <p><strong>Indexed</strong> <span id="atlas-pctx-indexed"></span></p>
+        <p><strong>Changes</strong> <span id="atlas-pctx-changes"></span></p>
+        <p id="atlas-pctx-potential"></p>
+        <p id="atlas-pctx-direction" class="atlas-pctx-direction"></p>
+      </div>
+      <section class="atlas-pctx-section">
+        <h3>Latest reports</h3>
+        <div id="atlas-pctx-reports"></div>
+      </section>
+      <section class="atlas-pctx-section">
+        <h3>Monetisation</h3>
+        <p id="atlas-pctx-finance" class="atlas-pctx-finance"></p>
+      </section>
+      <div class="atlas-pctx-actions">
+        <button type="button" class="atlas-project-btn atlas-project-btn--primary" data-pctx-ask-chat>Ask in Chat</button>
+        <button type="button" class="atlas-project-btn" data-pctx-dev-review>Developer Review</button>
+        <button type="button" class="atlas-project-btn" data-pctx-architect>Architect Plan</button>
+        <button type="button" class="atlas-project-btn" data-pctx-business>Business Analysis</button>
+        <button type="button" class="atlas-project-btn" data-pctx-marketing>Marketing Ideas</button>
+        <button type="button" class="atlas-project-btn" data-pctx-summary>Open Summary</button>
+        <button type="button" class="atlas-project-btn" id="atlas-pctx-pin" data-pctx-pin>Pin</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-project-summary-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-project-summary-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-atlas-summary-close></div>
+    <div class="atlas-report-modal-panel">
+      <header class="atlas-report-modal-header">
+        <div>
+          <p class="atlas-report-modal-agent" id="atlas-project-summary-agent"></p>
+          <h2 class="atlas-report-modal-title" id="atlas-project-summary-title">Project Summary</h2>
+          <p class="atlas-report-modal-meta" id="atlas-project-summary-meta"></p>
+        </div>
+        <button type="button" class="atlas-report-modal-close" data-atlas-summary-close aria-label="Close">&times;</button>
+      </header>
+      <p class="atlas-report-modal-summary" id="atlas-project-summary-text"></p>
+      <div class="atlas-report-modal-body" id="atlas-project-summary-body"></div>
+    </div>
+  </div>
+
+  <section id="atlas-finance-panel" class="atlas-os-panel hidden" aria-label="Finance">
+    <header class="atlas-os-panel-header">
+      <h1 class="atlas-os-panel-title">Finance</h1>
+      <p class="atlas-os-panel-subtitle">Personal + project finance — local manual tracking only.</p>
+    </header>
+    <div class="atlas-finance-overview" id="atlas-finance-overview-cards"></div>
+    <div class="atlas-finance-tabs">
+      <button type="button" class="atlas-finance-tab atlas-finance-tab--active" data-finance-tab="personal">Personal Breakdown</button>
+      <button type="button" class="atlas-finance-tab" data-finance-tab="project">Project Breakdown</button>
+    </div>
+    <section id="atlas-finance-personal" class="atlas-finance-tab-panel">
+      <div class="atlas-finance-personal-grid">
+        <article class="atlas-finance-block">
+          <h3>Upcoming bills</h3>
+          <ul id="atlas-finance-bills-list" class="atlas-finance-list"></ul>
+          <form id="atlas-finance-bill-form" class="atlas-finance-mini-form">
+            <input type="text" id="atlas-finance-bill-name" placeholder="Bill name (e.g. Rent)" required />
+            <input type="number" id="atlas-finance-bill-amount" placeholder="Amount" min="0" step="0.01" required />
+            <input type="number" id="atlas-finance-bill-due-day" placeholder="Due day (1-28)" min="1" max="28" />
+            <button type="submit" class="atlas-project-btn">Add Bill</button>
+          </form>
+        </article>
+        <article class="atlas-finance-block">
+          <h3>Work this week</h3>
+          <p id="atlas-finance-week-summary"></p>
+          <form id="atlas-finance-work-form" class="atlas-finance-mini-form">
+            <input type="date" id="atlas-finance-work-date" />
+            <select id="atlas-finance-work-type">
+              <option>Full Day</option><option>Half Day</option><option>Custom</option>
+            </select>
+            <input type="number" id="atlas-finance-work-amount" placeholder="Custom £" min="0" step="0.01" class="hidden" />
+            <button type="submit" class="atlas-project-btn">Log Work Day</button>
+          </form>
+          <ul id="atlas-finance-work-list" class="atlas-finance-list"></ul>
+        </article>
+      </div>
+    </section>
+    <section id="atlas-finance-project" class="atlas-finance-tab-panel hidden">
+      <label class="atlas-finance-project-select">Project
+        <select id="atlas-finance-project-select"></select>
+      </label>
+      <div class="atlas-finance-overview atlas-finance-project-cards" id="atlas-finance-project-cards"></div>
+      <div class="atlas-finance-table-wrap">
+        <table class="atlas-finance-table">
+          <thead><tr><th>Project</th><th>Expected</th><th>Actual</th><th>Costs</th><th>Profit</th><th></th></tr></thead>
+          <tbody id="atlas-finance-table-body"></tbody>
+        </table>
+      </div>
+      <section class="atlas-finance-strategy-wrap">
+        <h3>Monetisation Strategy</h3>
+        <div id="atlas-finance-strategy" class="atlas-finance-strategy"></div>
+      </section>
+      <div class="atlas-finance-project-actions">
+        <button type="button" id="atlas-finance-ask-business" class="atlas-project-btn">Ask Business Agent</button>
+        <button type="button" id="atlas-finance-monetisation-plan" class="atlas-project-btn">Generate Monetisation Plan</button>
+      </div>
+    </section>
+    <p class="atlas-finance-stripe-placeholder">Stripe connection coming later. No banking or payment APIs connected in V1.</p>
+  </section>
+
+  <div id="atlas-voice-modal" class="atlas-voice-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-voice-title" aria-hidden="true">
+    <div class="atlas-voice-backdrop" data-atlas-voice-close></div>
+    <div class="atlas-voice-panel">
+      <header class="atlas-voice-header">
+        <h2 id="atlas-voice-title">Voice Mode</h2>
+        <span id="atlas-voice-status" class="atlas-voice-status" data-status="idle">Idle</span>
+        <button type="button" class="atlas-voice-close" data-atlas-voice-close aria-label="Close">&times;</button>
+      </header>
+      <p class="atlas-voice-privacy">Microphone activates only when you click Listen or Mic. No always-on listening in V1.</p>
+      <div id="atlas-voice-wake-indicator" class="atlas-voice-wake-indicator"></div>
+      <textarea id="atlas-voice-transcript" class="atlas-voice-transcript" rows="4" placeholder="Your speech will appear here…"></textarea>
+      <div class="atlas-voice-controls">
+        <button type="button" id="atlas-voice-mic-btn" class="atlas-voice-btn">Mic — Dictate</button>
+        <button type="button" id="atlas-voice-listen-mode-btn" class="atlas-voice-btn">Listening Mode</button>
+        <button type="button" id="atlas-voice-stop-btn" class="atlas-voice-btn atlas-voice-btn--ghost">Stop</button>
+        <button type="button" id="atlas-voice-submit-btn" class="atlas-voice-btn atlas-voice-btn--primary">Send to Assistant</button>
+      </div>
+      <div class="atlas-voice-settings">
+        <label class="atlas-voice-toggle"><input type="checkbox" id="atlas-voice-speak-replies" /> Speak replies</label>
+        <label>Voice <select id="atlas-voice-tts-voice"></select></label>
+        <label>Wake phrases (comma-separated) <input type="text" id="atlas-voice-wake-input" value="Atlas are you awake?, Atlas what's up?, Hey Atlas" /></label>
+        <div id="atlas-voice-wake-phrases" class="atlas-voice-wake-phrases"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-report-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-report-modal-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-atlas-report-close></div>
+    <div class="atlas-report-modal-panel">
+      <header class="atlas-report-modal-header">
+        <div>
+          <p class="atlas-report-modal-agent" id="atlas-report-modal-agent"></p>
+          <h2 class="atlas-report-modal-title" id="atlas-report-modal-title"></h2>
+          <p class="atlas-report-modal-meta" id="atlas-report-modal-meta"></p>
+        </div>
+        <button type="button" class="atlas-report-modal-close" data-atlas-report-close aria-label="Close report">&times;</button>
+      </header>
+      <p class="atlas-report-modal-summary" id="atlas-report-modal-summary"></p>
+      <div class="atlas-report-modal-body" id="atlas-report-modal-body"></div>
+      <footer class="atlas-report-modal-actions" id="atlas-report-modal-actions"></footer>
+    </div>
+  </div>
+
+  <main class="chat-container atlas-shell atlas-assistant-panel welcome-active" id="chat-container" aria-label="Chat area" aria-busy="false">
     <!-- Persistent page heading for assistive tech. Visually hidden so it
          never affects layout, but always present inside the main landmark
          (the sidebar that shows the visible brand is hidden off-canvas on
          mobile) so the page always exposes a single level-1 heading. -->
-    <h1 class="a11y-visually-hidden">Odysseus</h1>
-    <div class="chat-top-bar">
+    <h1 class="a11y-visually-hidden">Atlas</h1>
+    <div class="chat-top-bar atlas-assistant-bar">
+      <div class="atlas-assistant-bar-left">
+        <span class="atlas-assistant-title">Assistant</span>
+        <span class="atlas-status-pill atlas-status-pill--offline" id="atlas-model-status" title="No model selected">
+          <span class="atlas-status-dot" aria-hidden="true"></span>
+          <span id="atlas-model-status-text">Select a model</span>
+        </span>
+      </div>
       <button type="button" class="incognito-indicator" id="incognito-indicator" title="Nobody mode active — click to deactivate" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><line x1="8" y1="16" x2="16" y2="8"/><line x1="8" y1="8" x2="16" y2="16"/></svg></button>
-      <div class="chat-meta-overlay"><span id="current-meta">Odysseus Chat</span><span id="current-meta-count" class="chat-meta-count" aria-hidden="true"></span><span id="session-cost-display" class="session-cost-display" style="display:none;"></span><span class="export-dropdown-wrap" id="export-dropdown-wrap"><button type="button" class="export-dl-btn" id="export-dl-btn" title="More"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="export-dropdown-menu" id="export-dropdown-menu"><div class="export-dropdown-item" id="export-rename-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></span><span>Rename</span></div><div class="export-dropdown-item" id="export-copy-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span>Copy Chat</span></div><div class="export-dropdown-item" id="export-pdf-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15v-2h2a1.5 1.5 0 0 1 0 3H9z"/></svg></span><span>PDF</span></div><div class="export-dropdown-item" id="export-doc-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span>Save to Documents</span></div></div></span></div>    </div>
+      <div class="chat-meta-overlay"><span id="current-meta">Atlas</span><span id="current-meta-count" class="chat-meta-count" aria-hidden="true"></span><span id="session-cost-display" class="session-cost-display" style="display:none;"></span><span class="export-dropdown-wrap" id="export-dropdown-wrap"><button type="button" class="export-dl-btn" id="export-dl-btn" title="More"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="export-dropdown-menu" id="export-dropdown-menu"><div class="export-dropdown-item" id="export-rename-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></span><span>Rename</span></div><div class="export-dropdown-item" id="export-copy-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span>Copy Chat</span></div><div class="export-dropdown-item" id="export-pdf-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15v-2h2a1.5 1.5 0 0 1 0 3H9z"/></svg></span><span>PDF</span></div><div class="export-dropdown-item" id="export-doc-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span>Save to Documents</span></div></div></span></div>    </div>
     <div id="welcome-screen">
-      <div class="welcome-name"><svg class="welcome-boat" viewBox="0 0 32 32"><path d="M16 4L16 22L6 22Z" fill="currentColor"/><path d="M16 8L16 22L24 22Z" fill="currentColor" opacity="0.6"/><path d="M4 24Q10 20 16 24Q22 28 28 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>Odysseus</div>
-      <div class="welcome-sub" id="welcome-sub">Welcome, <span class="setup-trigger-link" style="color:var(--accent,var(--red));font-weight:600;cursor:pointer;text-decoration:underline;" title="Click to launch setup">type /setup</span> to get started.</div>
+      <div class="welcome-name">Assistant</div>
+      <div class="welcome-sub" id="welcome-sub">Atlas is online. <span class="setup-trigger-link" style="color:var(--atlas-cyan,var(--accent));font-weight:600;cursor:pointer;text-decoration:underline;" title="Click to launch setup">Type /setup</span> to configure models.</div>
       <div class="welcome-tip" id="welcome-tip"></div>
       <button type="button" class="incognito-btn" id="incognito-btn" title="Enable Nobody mode — no memory, no history saved">
         <svg class="eye-open" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -993,10 +1363,14 @@
     <input type="file" id="file-input" class="hidden" multiple />
 
     <!-- Unified chat input bar -->
+    <div id="atlas-project-context-bar" class="atlas-project-context-bar hidden" aria-live="polite">
+      <span id="atlas-project-context-label">Project Context</span>
+      <button type="button" id="atlas-project-context-clear" class="atlas-project-context-clear">Clear Project Context</button>
+    </div>
     <div class="chat-input-bar">
       <div class="chat-input-top">
         <div id="message-ghost" class="ghost-text-overlay" aria-hidden="true"></div>
-        <textarea id="message" placeholder="Message Odysseus..." required autocomplete="off" aria-label="Message input" rows="1" autofocus></textarea>
+        <textarea id="message" placeholder="Message Atlas..." required autocomplete="off" aria-label="Message input" rows="1" autofocus></textarea>
         <!-- Model picker (inside chatbox, top-right) -->
         <div class="model-picker-wrap" id="model-picker-wrap">
           <button type="button" class="model-picker-btn" id="model-picker-btn" title="Switch model"><span id="model-picker-label">Select model</span> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg></button>
@@ -1227,6 +1601,58 @@
 
 
   </main>
+
+  <nav class="atlas-mc-dock atlas-dock-global" id="atlas-mc-dock" aria-label="Atlas navigation">
+    <button type="button" class="atlas-mc-dock-item active" data-dock-id="home" title="Home">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span>
+      <span class="atlas-mc-dock-label">Home</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="assistant" title="Assistant">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="atlas-mc-dock-label">Assistant</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="agents" title="Agents">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="8" height="10" rx="1"/><rect x="13" y="7" width="8" height="14" rx="1"/><path d="M7 11V7a2 2 0 0 1 2-2h2"/><path d="M17 7V5a2 2 0 0 1 2-2h0"/><circle cx="7" cy="16" r="1"/><circle cx="17" cy="14" r="1"/></svg></span>
+      <span class="atlas-mc-dock-label">Agents</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="projects" title="Projects">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="atlas-mc-dock-label">Projects</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="finance" title="Finance">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      <span class="atlas-mc-dock-label">Finance</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="brain" title="Brain">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></span>
+      <span class="atlas-mc-dock-label">Brain</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="tasks" title="Tasks">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg></span>
+      <span class="atlas-mc-dock-label">Tasks</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="calendar" title="Calendar">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      <span class="atlas-mc-dock-label">Calendar</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="notes" title="Notes">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5"/><path d="M8 17.5 15.5 10l2.5 2.5L10.5 20H8z"/></svg></span>
+      <span class="atlas-mc-dock-label">Notes</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="library" title="Library">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h6M9 11h4"/></svg></span>
+      <span class="atlas-mc-dock-label">Library</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="cookbook" title="Cookbook">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+      <span class="atlas-mc-dock-label">Cookbook</span>
+    </button>
+    <button type="button" class="atlas-mc-dock-item" data-dock-id="settings" title="Settings">
+      <span class="atlas-mc-dock-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <span class="atlas-mc-dock-label">Settings</span>
+    </button>
+  </nav>
+
   <button id="scroll-bottom-btn" class="scroll-nav-btn" title="Scroll to bottom">▼</button>
   <script nonce="{{CSP_NONCE}}">
   (function(){
@@ -1679,7 +2105,7 @@
             <div class="vis-toggles">
               <label class="vis-row">
                 <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg></span>
-                <span class="vis-label">Odysseus <span class="vis-hint">Brand name</span></span>
+                <span class="vis-label">Atlas <span class="vis-hint">Brand name</span></span>
                 <input type="checkbox" checked data-ui-key="sidebar-brand"><span class="vis-switch"></span>
               </label>
               <label class="vis-row">
@@ -1688,9 +2114,14 @@
                 <input type="checkbox" checked data-ui-key="sidebar-search"><span class="vis-switch"></span>
               </label>
               <label class="vis-row">
-                <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
-                <span class="vis-label">New Chat</span>
-                <input type="checkbox" checked data-ui-key="sidebar-new-chat"><span class="vis-switch"></span>
+                <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span>
+                <span class="vis-label">Home</span>
+                <input type="checkbox" checked data-ui-key="sidebar-home"><span class="vis-switch"></span>
+              </label>
+              <label class="vis-row">
+                <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                <span class="vis-label">Assistant</span>
+                <input type="checkbox" checked data-ui-key="sidebar-assistant"><span class="vis-switch"></span>
               </label>
               <label class="vis-row">
                 <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
@@ -1990,7 +2421,7 @@
           </div>
           <div class="admin-card">
             <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;opacity:0.6"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Public App URL</h2>
-            <div class="admin-toggle-sub" style="margin-bottom:8px">Used to build clickable links back to Odysseus inside outgoing reminder / urgent-email emails (e.g. <code>https://chat.yourdomain.com</code>). Leave blank to omit links.</div>
+            <div class="admin-toggle-sub" style="margin-bottom:8px">Used to build clickable links back to Atlas inside outgoing reminder / urgent-email emails (e.g. <code>https://chat.yourdomain.com</code>). Leave blank to omit links.</div>
             <div class="settings-col">
               <div class="settings-row">
                 <label class="settings-label">URL</label>

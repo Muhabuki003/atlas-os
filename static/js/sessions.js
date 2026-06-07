@@ -9,6 +9,7 @@ import { providerLogo } from './providers.js';
 import { initModelPicker, updateModelPicker } from './modelPicker.js';
 import themeModule from './theme.js';
 import spinnerModule from './spinner.js';
+import { isAtlasShellRoute, isAtlasAssistantRoute, atlasAssistantUrl } from './atlasShell.js';
 
 const API_BASE = window.location.origin;
 
@@ -62,9 +63,11 @@ function _deselectCurrentSession(sid) {
   if (currentSessionId !== sid) return;
   currentSessionId = null;
   uiModule.el('chat-history').innerHTML = '';
-  uiModule.el('current-meta').textContent = 'Odysseus Chat';
+  uiModule.el('current-meta').textContent = 'Atlas';
   Storage.remove('lastSessionId');
-  history.replaceState(null, '', window.location.pathname);
+  if (!isAtlasShellRoute()) {
+    history.replaceState({ atlasView: 'assistant' }, '', atlasAssistantUrl());
+  }
   if (window.chatModule && window.chatModule.showWelcomeScreen) {
     window.chatModule.showWelcomeScreen();
   }
@@ -1373,6 +1376,7 @@ export async function loadSessions() {
     // most recently appended a message.
     const _isTransient = (s) => !!s && (s.folder === 'Assistant' || s.folder === 'Tasks');
     const _realSessions = activeSessions.filter(s => !_isTransient(s));
+    const onHomeRoute = isAtlasShellRoute();
     const hashId = window.location.hash.replace('#', '');
     let savedId = Storage.get('lastSessionId');
     // If the persisted lastSessionId points to a transient session (legacy
@@ -1386,7 +1390,11 @@ export async function loadSessions() {
     }
     const hasPendingChat = !!_pendingChat;
     let targetId = null;
-    if (hasPendingChat) {
+    // Mission Control routes must not auto-restore a chat session.
+    if (onHomeRoute) {
+      targetId = null;
+      _skipAutoSelect = true;
+    } else if (hasPendingChat) {
       // A model was picked and the UI is showing a fresh New Chat, but the
       // session is not created until the first message. Background stream
       // completions call loadSessions() later; without this guard that reload
@@ -1424,7 +1432,7 @@ export async function loadSessions() {
     const _isFirstLoad = !sessionStorage.getItem('ody-session-active');
     if (_isFirstLoad) {
       sessionStorage.setItem('ody-session-active', '1');
-      if (!targetId) {
+      if (!onHomeRoute && !targetId) {
         try {
           const dcRes = await fetch(`${API_BASE}/api/default-chat`);
           const dc = await dcRes.json();
@@ -1459,7 +1467,7 @@ export async function loadSessions() {
     }
 
     // No session selected — still enable input so slash commands (e.g. /setup) work
-    if (!targetId && !hasPendingChat) {
+    if (!targetId && !hasPendingChat && !onHomeRoute) {
       const msgInput = document.getElementById('message');
       if (msgInput) {
         msgInput.disabled = false;
@@ -1488,7 +1496,8 @@ export async function loadSessions() {
   }
 }
 
-export async function selectSession(id, { keepSidebar = false } = {}) {
+export async function selectSession(id, { keepSidebar = false, skipHistory = false } = {}) {
+  if (window.homeModule && window.homeModule.hideHome) window.homeModule.hideHome();
   // Exit compare mode cleanly if active
   if (window.compareModule && window.compareModule.isActive()) {
     window.compareModule.deactivate(true);
@@ -1513,9 +1522,14 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
     const _isTransientChat = !!_meta && (_meta.folder === 'Assistant' || _meta.folder === 'Tasks');
     if (!_isTransientChat) {
       Storage.set('lastSessionId', id);
-      // Update URL hash without triggering hashchange handler
-      if (window.location.hash !== '#' + id) {
-        history.replaceState(null, '', '#' + id);
+      if (!skipHistory) {
+        const url = atlasAssistantUrl(id);
+        const onHome = isAtlasShellRoute();
+        if (onHome) {
+          history.pushState({ atlasView: 'assistant', sessionId: id }, '', url);
+        } else if (!isAtlasAssistantRoute() || window.location.hash !== '#' + id) {
+          history.replaceState({ atlasView: 'assistant', sessionId: id }, '', url);
+        }
       }
     }
     // Restore character preset for persistent chats
@@ -1573,7 +1587,7 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 
     const currentMetaEl = uiModule.el('current-meta');
     if (currentMetaEl) {
-      currentMetaEl.textContent = meta ? meta.name : 'Odysseus Chat';
+      currentMetaEl.textContent = meta ? meta.name : 'Atlas';
     }
     // Update model picker visibility
     updateModelPicker();
@@ -1779,7 +1793,7 @@ export function createDirectChat(url, modelId, endpointId) {
   _skipAutoSelect = true;
   currentSessionId = null;
   Storage.remove('lastSessionId');
-  history.replaceState(null, '', window.location.pathname);
+  history.replaceState({ atlasView: 'assistant' }, '', atlasAssistantUrl());
   document.querySelectorAll('.list-item.active-session, .session-item.active').forEach(el => {
     el.classList.remove('active-session', 'active');
   });
@@ -1869,7 +1883,7 @@ export async function materializePendingSession() {
   }
   currentSessionId = payload.id;
   Storage.set('lastSessionId', payload.id);
-  history.replaceState(null, '', '#' + payload.id);
+  history.replaceState({ atlasView: 'assistant', sessionId: payload.id }, '', atlasAssistantUrl(payload.id));
 
   // Reload sidebar to show the new session — await it so the session
   // is fully registered before the caller proceeds (prevents race conditions)
@@ -1910,7 +1924,7 @@ export function setCurrentSessionId(id) {
   currentSessionId = id;
   if (!id) {
     Storage.remove('lastSessionId');
-    history.replaceState(null, '', window.location.pathname);
+    history.replaceState({ atlasView: 'assistant' }, '', atlasAssistantUrl());
     document.querySelectorAll('.list-item.active-session, .session-item.active').forEach(el => {
       el.classList.remove('active-session', 'active');
     });
@@ -2004,11 +2018,12 @@ export function initDragSort() {
 // by their own click handlers in chatRenderer.js and must not trigger
 // session navigation (which would reset the active chat).
 window.addEventListener('hashchange', () => {
+  if (isAtlasShellRoute()) return;
   const hashId = window.location.hash.replace('#', '');
   if (/^(document|note|image|email|event|task|skill|research)-/.test(hashId)) return;
   if (hashId && hashId !== currentSessionId) {
     const target = sessions.find(s => s.id === hashId && !s.archived);
-    if (target) selectSession(hashId);
+    if (target) selectSession(hashId, { skipHistory: true });
   }
 });
 

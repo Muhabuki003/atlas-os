@@ -646,7 +646,7 @@ def setup_email_routes():
                 # so ordinary emails containing "Reminder" don't get mixed in.
                 status, data = _imap_uid_search(
                     conn,
-                    f'(OR HEADER X-Odysseus-Kind "reminder" SUBJECT "Reminder (Odysseus):"{from_clause})',
+                    f'(OR HEADER X-Odysseus-Kind "reminder" (OR SUBJECT "Reminder (Atlas):" SUBJECT "Reminder (Odysseus):"){from_clause})',
                 )
             elif filter_ == "pending_30d":
                 # "What's pending in the last month" — UNANSWERED + delivered
@@ -1794,9 +1794,11 @@ def setup_email_routes():
                         # explicit kind header, and subject fallback catches
                         # clients/providers that stripped custom headers.
                         uids.update(_search_uids(conn, f'(HEADER X-Odysseus-Kind {_search_quote("reminder")})'))
+                        uids.update(_search_uids(conn, f'(SUBJECT {_search_quote("Reminder (Atlas):")})'))
                         uids.update(_search_uids(conn, f'(SUBJECT {_search_quote("Reminder (Odysseus):")})'))
                         for addr in own_addrs:
                             addr_q = _search_quote(addr)
+                            uids.update(_search_uids(conn, f'(FROM {addr_q} SUBJECT {_search_quote("Reminder (Atlas):")})'))
                             uids.update(_search_uids(conn, f'(FROM {addr_q} SUBJECT {_search_quote("Reminder (Odysseus):")})'))
                             # Legacy reminders created before the Odysseus
                             # prefix still came from this mailbox as

@@ -45,13 +45,17 @@ import spinnerModule from './js/spinner.js';
 import { initKeyboardShortcuts } from './js/keyboard-shortcuts.js';
 import { initSidebarLayout, syncRailSide } from './js/sidebar-layout.js';
 import { initSectionCollapse, initSectionDrag } from './js/section-management.js';
+import homeModule from './js/home.js';
+import { initAtlasShell, updateAtlasModelStatus, isAtlasHomeRoute, isAtlasAgentsRoute, isAtlasProjectsRoute, isAtlasFinanceRoute, isAtlasShellRoute, isAtlasAssistantRoute, atlasAssistantUrl } from './js/atlasShell.js';
 
 const API_BASE = window.location.origin;
+window.updateAtlasModelStatus = updateAtlasModelStatus;
 window.themeModule = themeModule;
 window.sessionModule = sessionModule;
 window.uiModule = uiModule;
 window.adminModule = adminModule;
 window.cookbookModule = cookbookModule;
+window.homeModule = homeModule;
 
 // Redirect to login on 401 from any fetch
 const _origFetch = window.fetch;
@@ -351,7 +355,7 @@ function initializeEventListeners() {
       e.stopPropagation();
       exportMenu.classList.remove('open');
       const meta = sessionModule.getSessions().find(s => s.id === sessionModule.getCurrentSessionId());
-      const sessionName = meta ? meta.name : 'Odysseus Chat';
+      const sessionName = meta ? meta.name : 'Atlas';
       const originalTitle = document.title;
       document.title = sessionName;
       const chatHistory = document.getElementById('chat-history');
@@ -985,6 +989,20 @@ function initializeEventListeners() {
     }
   }
   const _routeOpen = {
+    '/': () => homeModule.showHome({ skipHistory: true }),
+    '/home': () => homeModule.showHome({ skipHistory: true }),
+    '/assistant': () => {
+      homeModule.showAssistantView({ dockId: 'assistant' });
+      const hashId = window.location.hash.replace('#', '');
+      if (hashId && sessionModule) {
+        sessionModule.selectSession(hashId, { keepSidebar: true, skipHistory: true });
+      } else if (window.chatModule && window.chatModule.showWelcomeScreen) {
+        window.chatModule.showWelcomeScreen();
+      }
+    },
+    '/agents': () => homeModule.showAgentsOffice({ skipHistory: true }),
+    '/projects': () => homeModule.showProjects({ skipHistory: true }),
+    '/finance': () => homeModule.showFinance({ skipHistory: true }),
     '/notes':    () => {
       if (!notesModule) return;
       _collapseSidebarToRail();
@@ -2195,7 +2213,7 @@ function initializeEventListeners() {
       pickerWrap.classList.toggle('picker-auto-hidden', w < PICKER_HIDE_WIDTH);
       // Hide placeholder text
       if (textarea) {
-        textarea.setAttribute('placeholder', w < PLACEHOLDER_HIDE_WIDTH ? '' : 'Message Odysseus...');
+        textarea.setAttribute('placeholder', w < PLACEHOLDER_HIDE_WIDTH ? '' : 'Message Atlas...');
       }
       // Hide entire bottom toolbar (tools, mode toggle) — only send button remains
       if (inputBottom) {
@@ -2461,7 +2479,9 @@ function initializeEventListeners() {
   // Selector map: key → CSS selector(s) for targets
   const UI_VIS_MAP = {
     'sidebar-brand':       '.sidebar-brand-title',
-    'sidebar-new-chat':    '#sidebar-new-chat-btn',
+    'sidebar-home':        '#sidebar-home-btn',
+    'sidebar-assistant':   '#sidebar-assistant-btn',
+    'sidebar-new-chat':    '#sidebar-new-chat-btn, #sidebar-assistant-btn',
     'sidebar-search':      '#sidebar-search-btn',
     'sessions-section':    '#sessions-section',
     'email-section':       '#email-section',
@@ -3087,6 +3107,7 @@ function initializeEventListeners() {
   if (railNewSession) {
     railNewSession.addEventListener('click', async () => {
       if (!sessionModule) return;
+      homeModule.hideHome();
       if (_closeCompareIfActive()) return;
       _deactivateIncognito();
       // Clear character on new chat
@@ -3117,6 +3138,7 @@ function initializeEventListeners() {
   if (mobileNewChat) {
     mobileNewChat.addEventListener('click', () => {
       if (!sessionModule) return;
+      homeModule.hideHome();
       if (_closeCompareIfActive()) return;
       _deactivateIncognito();
       _startFreshChat();
@@ -3134,6 +3156,7 @@ function initializeEventListeners() {
   if (brandBtn) {
     brandBtn.addEventListener('click', async () => {
       if (!sessionModule) return;
+      homeModule.hideHome();
       if (_closeCompareIfActive()) return;
       _deactivateIncognito();
       if (presetsModule && presetsModule.deactivateCharacter) presetsModule.deactivateCharacter();
@@ -3152,12 +3175,155 @@ function initializeEventListeners() {
     });
   }
 
+  function showAssistant({ skipHistory = false, sessionId = null } = {}) {
+    homeModule.showAssistantView({ dockId: 'assistant' });
+    if (!skipHistory) {
+      const sid = sessionId || (sessionModule && sessionModule.getCurrentSessionId
+        ? sessionModule.getCurrentSessionId()
+        : null);
+      const url = atlasAssistantUrl(sid);
+      if (window.location.pathname + window.location.hash !== url) {
+        history.pushState({ atlasView: 'assistant', sessionId: sid || null }, '', url);
+      }
+    }
+  }
+
+  async function _openAssistantFromHome(prompt = '', { submit = false, fresh = false, skipNav = false } = {}) {
+    if (!skipNav) showAssistant();
+    else homeModule.showAssistantView({ dockId: 'assistant' });
+    if (fresh) {
+      _deactivateIncognito();
+      if (presetsModule && presetsModule.deactivateCharacter) presetsModule.deactivateCharacter();
+      _syncResearchIndicator(false);
+      if (await _createDirectChatFromPreferredModel()) {
+        // session created
+      } else {
+        _startFreshChat();
+      }
+      document.querySelectorAll('.session-item.active').forEach(s => s.classList.remove('active'));
+    }
+    const input = el('message');
+    if (input && prompt) {
+      input.value = prompt;
+      if (uiModule.autoResize) uiModule.autoResize(input);
+    }
+    if (submit && prompt && input) {
+      const form = el('chat-form');
+      if (form) form.requestSubmit();
+    } else if (input) {
+      setTimeout(() => { try { input.focus(); } catch (_) {} }, 60);
+    }
+  }
+
+  function _openToolFromDock(toolId) {
+    if (toolId === 'home') {
+      homeModule.showHome();
+      return;
+    }
+    if (toolId === 'assistant') {
+      showAssistant();
+      _openAssistantFromHome('', { fresh: true, skipNav: true });
+      return;
+    }
+    if (toolId === 'agents') {
+      homeModule.showAgentsOffice();
+      return;
+    }
+    if (toolId === 'projects') {
+      homeModule.showProjects();
+      return;
+    }
+    if (toolId === 'finance') {
+      homeModule.showFinance();
+      return;
+    }
+    homeModule.showAssistantView({ dockId: toolId });
+    if (toolId === 'settings') {
+      settingsModule.open();
+      return;
+    }
+    if (toolId === 'library') {
+      if (sessionModule && sessionModule.openLibrary) sessionModule.openLibrary();
+      return;
+    }
+    const btnMap = {
+      brain: 'tool-memory-btn',
+      tasks: 'tool-tasks-btn',
+      calendar: 'tool-calendar-btn',
+      notes: 'tool-notes-btn',
+      cookbook: 'tool-cookbook-btn',
+    };
+    const btn = el(btnMap[toolId]);
+    if (btn) btn.click();
+  }
+
+  import('./js/atlasActiveProject.js').then((m) => m.default.initAtlasActiveProject({
+    navigateAssistant: () => _openAssistantFromHome('', { submit: false }),
+  })).catch(() => {});
+
+  homeModule.initHome({
+    openAssistant: _openAssistantFromHome,
+    openTool: _openToolFromDock,
+    showToast: uiModule.showToast,
+    defaultHome: false,
+  });
+
+  const sidebarHomeBtn = el('sidebar-home-btn');
+  if (sidebarHomeBtn) {
+    sidebarHomeBtn.addEventListener('click', () => {
+      homeModule.showHome();
+      if (window.innerWidth <= 768) {
+        const sb = el('sidebar');
+        if (sb) sb.classList.add('hidden');
+      }
+    });
+  }
+
+  function _openAssistantSidebar() {
+    showAssistant();
+    const brandBtn = el('sidebar-brand-btn');
+    if (brandBtn) brandBtn.click();
+  }
+
+  window.addEventListener('popstate', () => {
+    const path = window.location.pathname;
+    if (isAtlasHomeRoute(path)) {
+      homeModule.showHome({ skipHistory: true });
+      return;
+    }
+    if (isAtlasAgentsRoute(path)) {
+      homeModule.showAgentsOffice({ skipHistory: true });
+      return;
+    }
+    if (isAtlasProjectsRoute(path)) {
+      homeModule.showProjects({ skipHistory: true });
+      return;
+    }
+    if (isAtlasFinanceRoute(path)) {
+      homeModule.showFinance({ skipHistory: true });
+      return;
+    }
+    if (isAtlasAssistantRoute(path)) {
+      homeModule.showAssistantView({ dockId: 'assistant' });
+      const hashId = window.location.hash.replace('#', '');
+      if (hashId && sessionModule) {
+        sessionModule.selectSession(hashId, { keepSidebar: true, skipHistory: true });
+      } else if (chatModule && chatModule.showWelcomeScreen) {
+        chatModule.showWelcomeScreen();
+      }
+      return;
+    }
+    homeModule.showAssistantView({ dockId: 'assistant' });
+  });
+
+  const sidebarAssistantBtn = el('sidebar-assistant-btn');
+  if (sidebarAssistantBtn) {
+    sidebarAssistantBtn.addEventListener('click', _openAssistantSidebar);
+  }
+
   const sidebarNewChatBtn = el('sidebar-new-chat-btn');
   if (sidebarNewChatBtn) {
-    sidebarNewChatBtn.addEventListener('click', () => {
-      const brandBtn = el('sidebar-brand-btn');
-      if (brandBtn) brandBtn.click();
-    });
+    sidebarNewChatBtn.addEventListener('click', _openAssistantSidebar);
   }
 
   // Delete session button on icon rail
@@ -3417,6 +3583,8 @@ function initializeEventListeners() {
 function startOdysseusApp() {
   if (window.__odysseusAppStarted) return;
   window.__odysseusAppStarted = true;
+  initAtlasShell();
+  homeModule.bootAtlasHome();
   // Set CSS variables
   document.documentElement.style.setProperty('--line-height', '20px');
 
@@ -3826,8 +3994,8 @@ function startOdysseusApp() {
   // Initial icon state
   _updateSendBtnIcon();
 
-  // Auto-focus input on load
-  if (messageInput) {
+  // Auto-focus input on load (skip when Home command centre is active)
+  if (messageInput && !homeModule.isHomeActive()) {
     setTimeout(() => messageInput.focus(), 100);
   }
 
@@ -3992,8 +4160,19 @@ function startOdysseusApp() {
         // Fire any URL route opener now that sessions + module wiring are
         // ready. Deferred from up top of init for exactly this reason.
         if (window._odysseusRouteOpener) {
+          if (!isAtlasShellRoute(urlPath)) homeModule.showAssistantView({ dockId: 'assistant' });
           try { window._odysseusRouteOpener(); } catch (_) {}
           window._odysseusRouteOpener = null;
+        } else if (isAtlasHomeRoute(urlPath)) {
+          homeModule.showHome({ skipHistory: true });
+        } else if (isAtlasAgentsRoute(urlPath)) {
+          homeModule.showAgentsOffice({ skipHistory: true });
+        } else if (isAtlasProjectsRoute(urlPath)) {
+          homeModule.showProjects({ skipHistory: true });
+        } else if (isAtlasFinanceRoute(urlPath)) {
+          homeModule.showFinance({ skipHistory: true });
+        } else if (isAtlasAssistantRoute(urlPath)) {
+          homeModule.showAssistantView({ dockId: 'assistant' });
         }
       });
   } else {

@@ -1,0 +1,33 @@
+{
+  "bills": [
+    {
+      "id": "rent",
+      "name": "Rent",
+      "amount": 0,
+      "due_day": 1,
+      "frequency": "monthly",
+      "category": "housing",
+      "notes": "Set your rent amount in Finance → Personal",
+      "active": true,
+      "remind": true,
+      "next_due_date": null
+    }
+  ],
+  "work_log": [],
+  "weekly_deductions": [
+    {
+      "id": "car-rental",
+      "name": "Car Rental",
+      "amount": 75,
+      "frequency": "weekly",
+      "active": true,
+      "notes": "Weekly deduction from invoice pay"
+    }
+  ],
+  "settings": {
+    "full_day_rate": 134.61,
+    "half_day_rate": 67.305,
+    "payout_weekday": 4
+  },
+  "calendar_reminders": []
+}

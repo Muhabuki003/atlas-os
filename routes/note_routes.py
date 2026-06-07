@@ -332,7 +332,7 @@ async def dispatch_reminder(
                 msg["To"] = recipient
                 _t = title or 'Note'
                 _t = _t[len('Reminder:'):].strip() if _t.lower().startswith('reminder:') else _t
-                msg["Subject"] = f"Reminder (Odysseus): {_t}"
+                msg["Subject"] = f"Reminder (Atlas): {_t}"
                 msg["Date"] = _dt.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
                 msg["X-Odysseus-Origin"] = "odysseus-ui"
                 msg["X-Odysseus-Kind"] = "reminder"

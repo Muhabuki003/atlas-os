@@ -403,6 +403,7 @@ def setup_chat_routes(
         if workspace:
             _ws_real = os.path.realpath(os.path.expanduser(workspace))
             workspace = _ws_real if os.path.isdir(_ws_real) else ""
+        active_project_id = (form_data.get("active_project_id") or "").strip()[:64]
         # Plan mode is a modifier on agent mode — it only makes sense with tools.
         if plan_mode:
             chat_mode = "agent"
@@ -832,6 +833,16 @@ def setup_chat_routes(
 
             messages = ctx.messages
 
+            if active_project_id:
+                try:
+                    from src.atlas_projects import build_chat_project_context, record_activity
+                    _pctx = build_chat_project_context(active_project_id)
+                    if _pctx:
+                        messages = [{"role": "system", "content": _pctx}] + list(messages)
+                    record_activity(active_project_id, "chat")
+                except Exception as _pe:
+                    logger.debug("active project context skipped: %s", _pe)
+
             # Auto-compact notification
             if ctx.was_compacted:
                 yield f"data: {json.dumps({'type': 'compacted', 'context_length': ctx.context_length})}\n\n"
@@ -1057,6 +1068,7 @@ def setup_chat_routes(
                         workspace=workspace or None,
                         plan_mode=plan_mode,
                         approved_plan=approved_plan or None,
+                        active_project_id=active_project_id or None,
                     ):
                         if chunk.startswith("data: ") and not chunk.startswith("data: [DONE]"):
                             try:

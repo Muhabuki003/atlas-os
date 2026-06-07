@@ -717,4 +717,8 @@ export function updateModelPicker() {
   } else {
     label.textContent = displayName;
   }
+
+  if (typeof window.updateAtlasModelStatus === 'function') {
+    window.updateAtlasModelStatus(modelId);
+  }
 }
