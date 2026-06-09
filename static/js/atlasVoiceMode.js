@@ -1,15 +1,16 @@
-// Atlas OS — Voice Assistant V4 (Home overlay + Conversation Mode)
+// Atlas OS — Voice Assistant V5 (passive wake + phrase activation)
 
 import { prepareSpeechText } from './atlasVoiceTts.js';
+import { normalizeSubmitResult, cmdDebug } from './atlasCommandResult.js';
+import {
+  ACTIVATION_PHRASES,
+  findActivationPhrase,
+  findStandbyPhrase,
+  isActivationOnly,
+  stripVoicePrefixes,
+} from './atlasVoicePhrases.js';
 
-const DEFAULT_WAKE_PHRASES = [
-  'hey atlas',
-  'atlas are you awake',
-  "atlas what's up",
-  'atlas whats up',
-  'atlas are you there',
-  'atlas what are you up to',
-];
+const DEFAULT_WAKE_PHRASES = [...ACTIVATION_PHRASES];
 
 const STORAGE_KEY = 'atlas_voice_prefs';
 const DEFAULT_SILENCE_MS = 2000;
@@ -46,7 +47,12 @@ let _sttMode = 'browser';
 let _recognition = null;
 let _listenMode = null;
 let _wakeModeEnabled = false;
+let _passiveWakeActive = false;
+let _conversationActive = false;
 let _speakReplies = true;
+let _hudInterim = '';
+let _hudFinal = '';
+let _hudLastCommand = '';
 let _autoSubmit = true;
 let _selectedVoice = '';
 let _ttsRate = 0.8;
@@ -85,6 +91,7 @@ let _wakeRestartTimer = null;
 let _testRec = null;
 let _testTimer = null;
 let _noTranscriptTimer = null;
+let _noTranscriptMarkResult = null;
 let _engineSnapshot = null;
 let _diag = {
   permission: 'unknown',
@@ -153,6 +160,7 @@ function _clearNoTranscriptTimer() {
     clearTimeout(_noTranscriptTimer);
     _noTranscriptTimer = null;
   }
+  _noTranscriptMarkResult = null;
 }
 
 function _startNoTranscriptWatchdog() {
@@ -167,7 +175,7 @@ function _startNoTranscriptWatchdog() {
     _diagLog('no-transcript', msg);
     _showRecognitionDebug('no_transcript', msg);
   }, NO_TRANSCRIPT_WARN_MS);
-  _noTranscriptTimer._markResult = () => { hadResult = true; _clearNoTranscriptTimer(); };
+  _noTranscriptMarkResult = () => { hadResult = true; _clearNoTranscriptTimer(); };
 }
 
 function _loadHomeSettings() {
@@ -285,6 +293,14 @@ function _setStatus(status) {
   _updateLiveDebug();
   _updatePrivacyText();
   _syncHomeChip(status, label);
+  const hudLabel = status === 'wake-listening' && !_conversationActive ? 'Wake Listening' : label;
+  updateVoiceHud({ status, label: hudLabel });
+  const listening = ['wake-listening', 'command-listening', 'listening', 'recording'].includes(status);
+  window.atlasVoiceService?.setListeningLabel?.(listening ? '…' : (status === 'processing' ? 'processing' : status === 'speaking' ? 'speaking' : ''));
+  const chip = _el('atlas-voice-status-chip');
+  if (chip) chip.dataset.status = status;
+  const chipText = chip?.querySelector('.atlas-voice-status-chip-text');
+  if (chipText) chipText.textContent = listening ? 'Wake Listening ●' : (hudLabel || 'Standby');
 }
 
 function _syncHomeChip(status, label) {
@@ -312,17 +328,55 @@ function _normalizeTranscript(text) {
 }
 
 function _findWakePhrase(text) {
-  const norm = _normalizeTranscript(text);
-  if (!norm) return null;
-  for (const p of _wakePhrases) {
-    const phrase = _normalizeTranscript(p);
-    if (phrase && norm.includes(phrase)) return p;
-  }
-  return null;
+  return findActivationPhrase(text);
 }
 
 function _matchesWakePhrase(text) {
   return !!_findWakePhrase(text);
+}
+
+export function updateVoiceHud({ status, label, interim, final, lastCommand } = {}) {
+  if (typeof lastCommand === 'string') {
+    _hudLastCommand = lastCommand;
+    window.atlasVoiceService?.setLastCommand?.(lastCommand);
+  }
+  _updateCommandInputDisplay(final ?? _transcript, { interim: interim ?? '' });
+}
+
+function _updateCommandInputDisplay(text, { interim = '' } = {}) {
+  const input = _el('atlas-home-command-input');
+  if (!input) return;
+  const display = interim ? `${text || ''} ${interim}`.trim() : (text || '');
+  const listening = ['wake-listening', 'command-listening', 'listening', 'recording'].includes(_phase);
+  if (display && listening && !_submitting) {
+    input.value = display;
+    input.classList.add('atlas-mc-command-input--listening');
+    input.placeholder = '';
+  } else if (!listening && !_submitting) {
+    input.classList.remove('atlas-mc-command-input--listening');
+    if (!input.matches(':focus')) {
+      input.placeholder = 'Command Atlas…';
+    }
+  }
+}
+
+export function clearCommandInput() {
+  const input = _el('atlas-home-command-input');
+  if (input) {
+    input.value = '';
+    input.classList.remove('atlas-mc-command-input--listening');
+    input.placeholder = 'Command Atlas…';
+  }
+}
+
+export function clearVoiceHud() {
+  _hudInterim = '';
+  _hudFinal = '';
+  _hudLastCommand = '';
+  _finalTranscript = '';
+  _transcript = '';
+  clearCommandInput();
+  window.atlasVoiceService?.setLastCommand?.('');
 }
 
 function _updateLiveDebug() {
@@ -353,10 +407,13 @@ function _updateLiveDebug() {
 function _updatePrivacyText() {
   const el = _el('atlas-voice-privacy-browser');
   if (!el || _isWhisperMode()) return;
-  const active = _wakeModeEnabled || _homeConversationActive;
-  el.textContent = active
-    ? "Conversation Mode is active. Atlas is listening for the wake phrase. Say 'Hey Atlas'."
-    : 'Microphone is off until you start listening or enable Conversation Mode.';
+  if (_conversationActive) {
+    el.textContent = "Conversation Mode is on. Say your command, or 'Atlas standby' to stop.";
+  } else if (_passiveWakeActive) {
+    el.textContent = "Passive wake listening is on. Say 'Hey Atlas' to activate — no clap detection.";
+  } else {
+    el.textContent = 'Microphone is off until you open Home or start listening.';
+  }
 }
 
 function _clearCommandStartTimer() {
@@ -443,36 +500,52 @@ function _isLikelySelfTranscription(text) {
   return spoken.includes(low) || low.includes(spoken.slice(0, Math.min(24, spoken.length)));
 }
 
+function _handleStandbyPhrase(text) {
+  const hit = findStandbyPhrase(text);
+  if (!hit) return false;
+  void _onStandbyDetected(hit);
+  return true;
+}
+
+async function _onStandbyDetected() {
+  if (_wakeHandling) return;
+  _wakeHandling = true;
+  _stopRecognition();
+  _clearCommandTimer();
+  _finalTranscript = '';
+  _updateTranscript('');
+  _conversationActive = false;
+  _wakeModeEnabled = false;
+  _homeConversationActive = false;
+  _followUpMode = false;
+  _homeDeps?.onDeactivate?.();
+  _setMicPaused(true);
+  try {
+    await speakText('Standing by sir.', { short: false });
+  } finally {
+    _wakeHandling = false;
+    _setMicPaused(false);
+    _passiveWakeActive = true;
+    _startWakeListening();
+  }
+}
+
 function _handleControlCommand(text) {
+  if (_handleStandbyPhrase(text)) return true;
   const low = text.toLowerCase().trim();
   if (/never\s*mind/.test(low)) {
     _finalTranscript = '';
     _updateTranscript('');
     _stopRecognition();
-    if (_homeConversationActive) _startFollowUpOrWake();
+    if (_conversationActive) _startFollowUpOrWake();
+    else if (_passiveWakeActive) _startWakeListening();
     else _setStatus('idle');
     return true;
   }
   if (/stop\s*talking/.test(low)) {
     window.speechSynthesis?.cancel();
     _setMicPaused(false);
-    if (_interruptionEnabled) _startCommandCapture();
-    return true;
-  }
-  if (/hey\s+atlas\s+take\s+a\s+break/.test(low) || /atlas\s+take\s+a\s+break/.test(low)) {
-    speakText('Understood sir. I will stand by.', { short: false, onEnd: () => {
-      _homeDeps?.setPaused?.(true);
-      _setStatus('paused');
-    }});
-    return true;
-  }
-  if (/hey\s+atlas\s+stop\s+listening/.test(low) || /atlas\s+stop\s+listening/.test(low)) {
-    stopHomeConversation();
-    if (_deps.showToast) _deps.showToast('Conversation Mode disabled');
-    return true;
-  }
-  if (/hey\s+atlas\s+are\s+you\s+there/.test(low) || /atlas\s+are\s+you\s+there/.test(low)) {
-    speakText('Always sir.', { short: false, onEnd: () => _startCommandCapture() });
+    if (_interruptionEnabled && _conversationActive) _startCommandCapture();
     return true;
   }
   return false;
@@ -487,12 +560,13 @@ function _clearFollowUpTimer() {
 
 function _startFollowUpWindow() {
   _clearFollowUpTimer();
-  if (!_homeConversationActive && !_wakeModeEnabled) return;
+  if (!_conversationActive) return;
   _followUpMode = true;
   _followUpTimer = setTimeout(() => {
     _followUpMode = false;
     _debug('follow-up window ended → wake listening');
-    if (_homeConversationActive || _wakeModeEnabled) _startWakeListening();
+    if (_conversationActive) _startCommandCapture({ fromFollowUp: true });
+    else if (_passiveWakeActive) _startWakeListening();
   }, _followUpTimeoutMs);
   _startCommandCapture({ fromFollowUp: true });
 }
@@ -503,11 +577,9 @@ export function enterFollowUpListening() {
 }
 
 function _startFollowUpOrWake() {
-  if (_homeConversationActive || _wakeModeEnabled) {
-    _startFollowUpWindow();
-  } else {
-    _setStatus('idle');
-  }
+  if (_conversationActive) _startFollowUpWindow();
+  else if (_passiveWakeActive) _startWakeListening();
+  else _setStatus('idle');
 }
 
 export function speakText(text, { onEnd, short = true, style } = {}) {
@@ -580,6 +652,17 @@ function _handleRecognitionError(code) {
   _diag.lastError = code;
   _showRecognitionDebug(code, RECOGNITION_ERROR_HINTS[code] || `Speech error: ${code}`);
   _stopRecognition();
+  if (code === 'no-speech' || code === 'aborted') {
+    if (_passiveWakeActive && !_conversationActive) {
+      _scheduleWakeRestart();
+      return;
+    }
+    if (_conversationActive) {
+      _startFollowUpOrWake();
+      return;
+    }
+    return;
+  }
   if (code === 'network') {
     _wakeModeEnabled = false;
     _homeConversationActive = false;
@@ -589,6 +672,15 @@ function _handleRecognitionError(code) {
     _setStatus('error');
     _showSwitchWhisper(true);
     if (_deps.showToast) _deps.showToast('Browser speech unavailable. Switch to Local Whisper.');
+    return;
+  }
+  if (_passiveWakeActive && !_conversationActive) {
+    _setStatus('wake-listening');
+    _scheduleWakeRestart();
+    return;
+  }
+  if (_conversationActive) {
+    _startFollowUpOrWake();
     return;
   }
   _setStatus('error');
@@ -666,10 +758,13 @@ function _syncControlState() {
   if (modeSel) modeSel.disabled = listening || _wakeModeEnabled || busy;
 }
 
-function _updateTranscript(text) {
+function _updateTranscript(text, { interim = '' } = {}) {
   _transcript = text;
   const ta = _el('atlas-voice-transcript');
   if (ta) ta.value = text;
+  if (_conversationActive || _passiveWakeActive) {
+    _updateCommandInputDisplay(text, { interim });
+  }
 }
 
 async function _refreshWhisperStatus() {
@@ -778,24 +873,35 @@ function _scheduleCommandFinish() {
 function _finishCommandCapture() {
   _clearCommandTimer();
   _stopRecognition();
-  const text = (_el('atlas-voice-transcript')?.value || '').trim();
-  if (!text) {
-    if (_homeConversationActive || _wakeModeEnabled) {
+  const raw = (_el('atlas-voice-transcript')?.value || '').trim();
+  if (!raw) {
+    if (_conversationActive) {
       speakText('I did not catch that, sir.', { onEnd: () => _startFollowUpOrWake() });
+    } else if (_passiveWakeActive) {
+      _startWakeListening();
     } else {
       _setStatus('idle');
     }
     return;
   }
-  if (_handleControlCommand(text)) return;
+  if (_handleControlCommand(raw)) return;
+  const text = stripVoicePrefixes(raw);
+  if (!text || isActivationOnly(text)) {
+    if (_conversationActive) _startCommandCapture();
+    else if (_passiveWakeActive) _startWakeListening();
+    return;
+  }
+  _finalTranscript = text;
+  _updateTranscript(text);
   _submitToAssistant();
 }
 
 async function _onWakeDetected(matchedPhrase = '') {
-  if (_wakeHandling) return;
+  if (_wakeHandling || _conversationActive) return;
   _wakeHandling = true;
+  window.atlasVoiceService?.triggerWakeAnimation?.();
   _debugLastWake = matchedPhrase || 'hey atlas';
-  _debug('wake detected', _debugLastWake);
+  _debug('activation phrase', _debugLastWake);
   _updateLiveDebug();
 
   _stopRecognition();
@@ -803,41 +909,31 @@ async function _onWakeDetected(matchedPhrase = '') {
   _setMicPaused(true);
   _setStatus('wake-detected');
 
-  const online = _el('atlas-voice-wake-indicator');
-  if (online) {
-    online.classList.add('atlas-voice-wake-indicator--active');
-    online.textContent = 'Wake phrase detected';
-  }
-
   _finalTranscript = '';
   _updateTranscript('');
 
-  _clearCommandStartTimer();
-  _commandStartTimer = setTimeout(() => {
-    if (!['command-listening', 'listening'].includes(_phase)) {
-      _debug('command_listen_failed timeout');
-      _showRecognitionDebug('command_listen_failed', 'Command listening failed to start after wake phrase.');
-      _setStatus('error');
-      _wakeHandling = false;
-      _setMicPaused(false);
-      _startWakeListening();
-    }
-  }, COMMAND_START_TIMEOUT_MS);
-
   try {
-    await speakText('Yes sir?', { short: false });
+    _homeDeps?.onActivate?.();
+    _conversationActive = true;
+    _wakeModeEnabled = true;
+    _homeConversationActive = true;
+    _speakReplies = true;
+    _homeDeps?.saveSettings?.({ conversation_mode_enabled: true, speak_replies: true });
+
+    await speakText('Online sir.', { short: false });
     const started = _startCommandCapture();
     if (!started) {
-      _showRecognitionDebug('command_listen_failed', 'Could not start command listening after greeting.');
+      _showRecognitionDebug('command_listen_failed', 'Could not start command listening after activation.');
       _setStatus('error');
       _setMicPaused(false);
+      _passiveWakeActive = true;
       _startWakeListening();
     }
   } catch (err) {
-    _debug('wake flow error', err?.message);
-    _showRecognitionDebug('command_listen_failed', err?.message || 'Wake flow failed');
+    _debug('activation flow error', err?.message);
     _setStatus('error');
     _setMicPaused(false);
+    _passiveWakeActive = true;
     _startWakeListening();
   } finally {
     _wakeHandling = false;
@@ -849,7 +945,7 @@ export function simulateWakePhrase() {
 }
 
 function _canRunHomeEngine() {
-  return _homeConversationActive || _wakeModeEnabled || _followUpMode;
+  return _passiveWakeActive || _conversationActive || _followUpMode;
 }
 
 function _startCommandCapture({ fromFollowUp = false } = {}) {
@@ -883,19 +979,19 @@ function _startWakeListening() {
 }
 
 function _syncHomeEngineFlags() {
-  if (_homeDeps?.isConversationEnabled?.() && window.homeModule?.isHomeActive?.()) {
-    _homeConversationActive = true;
+  if (_homeDeps?.isConversationEnabled?.()) {
+    _conversationActive = true;
     _wakeModeEnabled = true;
-    const toggle = _el('atlas-voice-wake-mode');
-    if (toggle) toggle.checked = true;
+    _homeConversationActive = true;
   }
 }
 
 function _shouldRestartWake() {
-  _syncHomeEngineFlags();
+  const recoverablePhase = ['wake-listening', 'idle', 'error'].includes(_phase);
   return _listenMode === 'wake'
-    && (_wakeModeEnabled || _homeConversationActive)
-    && _phase === 'wake-listening'
+    && _passiveWakeActive
+    && !_conversationActive
+    && recoverablePhase
     && !_micPaused
     && !_submitting
     && !_wakeHandling
@@ -911,6 +1007,7 @@ function _scheduleWakeRestart() {
 }
 
 function _handleWakeResult(interim, final) {
+  if (_conversationActive) return false;
   if (_wakeHandling || ['wake-detected', 'greeting', 'speaking', 'processing'].includes(_phase)) return false;
 
   if (interim) _debugInterim = interim.trim();
@@ -964,7 +1061,7 @@ function _bindRecognitionHandlers(rec, { conversation = false } = {}) {
   };
 
   rec.onresult = (e) => {
-    if (_noTranscriptTimer?._markResult) _noTranscriptTimer._markResult();
+    if (_noTranscriptMarkResult) _noTranscriptMarkResult();
     _diagLog('onresult', `idx=${e.resultIndex} len=${e.results.length}`);
 
     if (_submitting) return;
@@ -986,6 +1083,11 @@ function _bindRecognitionHandlers(rec, { conversation = false } = {}) {
       return;
     }
 
+    if (_conversationActive && conversation) {
+      const probe = `${_finalTranscript} ${final || interim}`.trim();
+      if (probe && _handleStandbyPhrase(probe)) return;
+    }
+
     if (final) {
       const chunk = final.trim();
       if (_isLikelySelfTranscription(chunk)) return;
@@ -994,14 +1096,14 @@ function _bindRecognitionHandlers(rec, { conversation = false } = {}) {
       const next = `${_finalTranscript} ${chunk}`.trim();
       if (next === _finalTranscript) return;
       _finalTranscript = next;
-      _updateTranscript(_finalTranscript);
+      _updateTranscript(_finalTranscript, { interim: '' });
       _updateLiveDebug();
       if (conversation) _scheduleCommandFinish();
     } else if (interim) {
       if (!_isLikelySelfTranscription(interim)) {
         _debugInterim = interim.trim();
         _diag.lastNormalized = _normalizeTranscript(interim);
-        _updateTranscript(`${_finalTranscript} ${interim}`.trim());
+        _updateTranscript(`${_finalTranscript} ${interim}`.trim(), { interim: interim.trim() });
         _updateLiveDebug();
       }
     }
@@ -1323,9 +1425,13 @@ async function _returnToWakeStandby() {
     _syncControlState();
     return;
   }
-  if (!_homeConversationActive && !_wakeModeEnabled) {
+  if (!_conversationActive && !_passiveWakeActive) {
     _setStatus('idle');
     _syncControlState();
+    return;
+  }
+  if (!_conversationActive) {
+    _startWakeListening();
     return;
   }
   _debug('enter follow-up listening');
@@ -1341,11 +1447,9 @@ export function recoverAfterProcessing() {
     _setStatus('paused');
     return;
   }
-  if (_homeConversationActive || _wakeModeEnabled) {
-    _startFollowUpWindow();
-  } else {
-    _setStatus('idle');
-  }
+  if (_conversationActive) _startFollowUpWindow();
+  else if (_passiveWakeActive) _startWakeListening();
+  else _setStatus('idle');
 }
 
 function _clearResponseTimeout() {
@@ -1376,12 +1480,45 @@ function _handleAssistantResponse(text, { failed = false } = {}) {
   }
 }
 
+function _finishSubmitResult(result) {
+  const r = normalizeSubmitResult(result);
+  _clearResponseTimeout();
+  _submitting = false;
+  cmdDebug('voice pipeline result', r);
+
+  if (r.handled) {
+    if (r.spoken) {
+      _returnToWakeStandby();
+      return;
+    }
+    if (r.message) {
+      _handleAssistantResponse(r.message, { failed: false });
+      return;
+    }
+    _returnToWakeStandby();
+    return;
+  }
+
+  if (!r.ok || !r.message) {
+    _handleAssistantResponse('', { failed: true });
+    return;
+  }
+  _handleAssistantResponse(r.message, { failed: false });
+}
+
 function _submitToAssistant() {
-  const text = (_el('atlas-voice-transcript')?.value || '').trim();
+  const raw = (_el('atlas-voice-transcript')?.value || '').trim();
+  const text = stripVoicePrefixes(raw);
   if (!text || _submitting) {
     if (!text) _returnToWakeStandby();
     return;
   }
+  if (isActivationOnly(text)) {
+    _returnToWakeStandby();
+    return;
+  }
+  updateVoiceHud({ lastCommand: text });
+  clearCommandInput();
   if (text === _lastSubmittedText && Date.now() - _lastSubmittedAt < 4000) {
     _debug('duplicate submit blocked', text.slice(0, 40));
     return;
@@ -1400,22 +1537,23 @@ function _submitToAssistant() {
     if (_submitting) _handleAssistantResponse('', { failed: true });
   }, RESPONSE_TIMEOUT_MS);
 
-  const onDone = (responseText) => {
-    _clearResponseTimeout();
-    const failed = !(responseText || '').trim();
+  const onDone = (result) => {
     try {
-      _handleAssistantResponse(responseText, { failed });
-    } finally {
+      _finishSubmitResult(result);
+    } catch (err) {
       _submitting = false;
+      _handleAssistantResponse('', { failed: true });
     }
   };
 
-  const useHome = (_homeConversationActive || (_homeDeps?.submitMessage && window.homeModule?.isHomeActive?.()));
+  const failResult = { handled: false, ok: false, message: '', spoken: false };
+
+  const useHome = !!(_homeDeps?.submitMessage);
   if (useHome && _homeDeps?.submitMessage) {
     _homeDeps.submitMessage(text, {
       onComplete: onDone,
-      onError: () => onDone(''),
-    }).catch(() => onDone(''));
+      onError: () => onDone(failResult),
+    }).catch(() => onDone(failResult));
   } else if (_deps.openAssistant) {
     const stayOnHome = useHome;
     _deps.openAssistant(text, {
@@ -1436,8 +1574,6 @@ function _setWakeMode(enabled) {
   _wakeModeEnabled = enabled;
   const toggle = _el('atlas-voice-wake-mode');
   if (toggle) toggle.checked = enabled;
-  const homeConv = _el('atlas-home-conv-mode');
-  if (homeConv) homeConv.checked = enabled;
   _homeDeps?.saveSettings?.({ conversation_mode_enabled: enabled });
 
   if (!enabled) {
@@ -1754,35 +1890,73 @@ export function applySettings(s = {}) {
   if (typeof s.silence_submit_delay_ms === 'number') _silenceSubmitMs = s.silence_submit_delay_ms;
   if (typeof s.follow_up_timeout_ms === 'number') _followUpTimeoutMs = s.follow_up_timeout_ms;
   if (typeof s.conversation_mode_enabled === 'boolean') {
+    _conversationActive = s.conversation_mode_enabled;
     _wakeModeEnabled = s.conversation_mode_enabled;
-    if (s.conversation_mode_enabled && window.homeModule?.isHomeActive?.()) {
-      _homeConversationActive = true;
-    }
+    _homeConversationActive = s.conversation_mode_enabled;
+  }
+  if (typeof s.passive_wake_enabled === 'boolean') {
+    _passiveWakeActive = s.passive_wake_enabled;
+  }
+}
+
+export function startPassiveWakeListening() {
+  if (_homeDeps?.isPaused?.()) return;
+  if (_isWhisperMode()) return;
+  _passiveWakeActive = true;
+  _debug('start passive wake');
+  _refreshMicPermission();
+  if (!_conversationActive && _speechSupported() && !_micPaused && !_submitting) {
+    _startWakeListening();
+    updateVoiceHud({ status: 'wake-listening', label: 'Passive wake' });
+  }
+}
+
+export function enterConversationMode() {
+  _conversationActive = true;
+  _wakeModeEnabled = true;
+  _homeConversationActive = true;
+  const toggle = _el('atlas-voice-wake-mode');
+  if (toggle) toggle.checked = true;
+}
+
+export function exitConversationMode() {
+  _conversationActive = false;
+  _wakeModeEnabled = false;
+  _homeConversationActive = false;
+  _followUpMode = false;
+  _submitting = false;
+  _clearFollowUpTimer();
+  _clearResponseTimeout();
+  _stopRecognition();
+  const toggle = _el('atlas-voice-wake-mode');
+  if (toggle) toggle.checked = false;
+  if (_passiveWakeActive) {
+    _setStatus('wake-listening');
+    _startWakeListening();
+  } else {
+    _setStatus('idle');
+  }
+}
+
+export function enterCommandListening() {
+  if (_homeDeps?.isPaused?.()) return;
+  if (!_conversationActive) return;
+  if (_speechSupported() && !_micPaused && !_submitting) {
+    _startCommandCapture();
+    updateVoiceHud({ status: 'command-listening', label: 'Listening' });
   }
 }
 
 export function startHomeConversation() {
-  if (_homeDeps?.isPaused?.()) return;
-  _homeConversationActive = true;
-  _wakeModeEnabled = true;
-  const toggle = _el('atlas-voice-wake-mode');
-  if (toggle) toggle.checked = true;
-  _debug('start home conversation');
-  _refreshMicPermission();
-  if (_speechSupported() && !_micPaused && !_submitting) _startWakeListening();
-  else _syncHomeChip('wake-listening', 'Wake listening');
+  enterConversationMode();
+  enterCommandListening();
 }
 
 export function stopHomeConversation() {
-  _homeConversationActive = false;
-  _wakeModeEnabled = false;
-  _followUpMode = false;
-  _clearFollowUpTimer();
-  _stopRecognition();
-  const toggle = _el('atlas-voice-wake-mode');
-  if (toggle) toggle.checked = false;
-  _homeDeps?.saveSettings?.({ conversation_mode_enabled: false });
-  _notifyStatus('idle', 'Standby');
+  exitConversationMode();
+  _homeDeps?.saveSettings?.({ conversation_mode_enabled: false, speak_replies: false });
+  _notifyStatus('wake-listening', 'Passive wake');
+  if (_passiveWakeActive) _startWakeListening();
 }
 
 export function pauseHomeConversation() {
@@ -1793,13 +1967,18 @@ export function pauseHomeConversation() {
 
 export function resumeHomeConversation() {
   _micPaused = false;
-  if (_homeConversationActive || _wakeModeEnabled) startHomeConversation();
+  if (_passiveWakeActive) startPassiveWakeListening();
+  if (_conversationActive) enterCommandListening();
 }
 
 const atlasVoiceMode = {
   initAtlasVoiceMode,
   initHomeConversation,
   applySettings,
+  startPassiveWakeListening,
+  enterConversationMode,
+  exitConversationMode,
+  enterCommandListening,
   startHomeConversation,
   stopHomeConversation,
   pauseHomeConversation,
@@ -1814,6 +1993,9 @@ const atlasVoiceMode = {
   forceCommandMode,
   setSttMode,
   getSttMode,
+  updateVoiceHud,
+  clearVoiceHud,
+  clearCommandInput,
 };
 
 export default atlasVoiceMode;

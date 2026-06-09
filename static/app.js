@@ -46,6 +46,7 @@ import { initKeyboardShortcuts } from './js/keyboard-shortcuts.js';
 import { initSidebarLayout, syncRailSide } from './js/sidebar-layout.js';
 import { initSectionCollapse, initSectionDrag } from './js/section-management.js';
 import homeModule from './js/home.js';
+import atlasVoiceService from './js/atlasVoiceService.js';
 import { initAtlasShell, updateAtlasModelStatus, isAtlasHomeRoute, isAtlasAgentsRoute, isAtlasProjectsRoute, isAtlasFinanceRoute, isAtlasShellRoute, isAtlasAssistantRoute, atlasAssistantUrl } from './js/atlasShell.js';
 
 const API_BASE = window.location.origin;
@@ -3341,6 +3342,14 @@ function initializeEventListeners() {
     submitHomeChat: _submitHomeChat,
   });
 
+  void atlasVoiceService.init({
+    openAssistant: _openAssistantFromHome,
+    openFullAssistant: () => showAssistant(),
+    openTool: _openToolFromDock,
+    showToast: uiModule.showToast,
+    submitHomeChat: _submitHomeChat,
+  });
+
   const sidebarHomeBtn = el('sidebar-home-btn');
   if (sidebarHomeBtn) {
     sidebarHomeBtn.addEventListener('click', () => {
@@ -4246,19 +4255,20 @@ function startOdysseusApp() {
         if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 300); }
         // Fire any URL route opener now that sessions + module wiring are
         // ready. Deferred from up top of init for exactly this reason.
+        const routePath = window.location.pathname;
         if (window._odysseusRouteOpener) {
-          if (!isAtlasShellRoute(urlPath)) homeModule.showAssistantView({ dockId: 'assistant' });
+          if (!isAtlasShellRoute(routePath)) homeModule.showAssistantView({ dockId: 'assistant' });
           try { window._odysseusRouteOpener(); } catch (_) {}
           window._odysseusRouteOpener = null;
-        } else if (isAtlasHomeRoute(urlPath)) {
+        } else if (isAtlasHomeRoute(routePath)) {
           homeModule.showHome({ skipHistory: true });
-        } else if (isAtlasAgentsRoute(urlPath)) {
+        } else if (isAtlasAgentsRoute(routePath)) {
           homeModule.showAgentsOffice({ skipHistory: true });
-        } else if (isAtlasProjectsRoute(urlPath)) {
+        } else if (isAtlasProjectsRoute(routePath)) {
           homeModule.showProjects({ skipHistory: true });
-        } else if (isAtlasFinanceRoute(urlPath)) {
+        } else if (isAtlasFinanceRoute(routePath)) {
           homeModule.showFinance({ skipHistory: true });
-        } else if (isAtlasAssistantRoute(urlPath)) {
+        } else if (isAtlasAssistantRoute(routePath)) {
           homeModule.showAssistantView({ dockId: 'assistant' });
         }
       });

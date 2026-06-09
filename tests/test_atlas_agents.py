@@ -102,6 +102,35 @@ def test_normalize_action_aliases():
     assert atlas_agents.normalize_action("sync") == "sync_agents"
 
 
+@pytest.mark.asyncio
+async def test_run_agent_message_fallback_without_llm(atlas_data_dir, monkeypatch):
+    def _no_llm(owner):
+        return None, None, None
+
+    monkeypatch.setattr(atlas_agents, "_resolve_llm", _no_llm)
+
+    result = await atlas_agents.run_agent_message(
+        "research",
+        "Research AI tools for landlords under £50 startup cost.",
+        owner="testuser",
+    )
+
+    assert result["ok"] is True
+    assert result["completed"] is True
+    assert result["used_llm"] is False
+    report = result["report"]
+    assert report["agent_id"] == "research"
+    assert report["status"] == "waiting_for_review"
+    assert report.get("source") == "agent_message"
+    assert "landlords" in report.get("user_message", "").lower()
+    assert report["content"]
+
+    agents = atlas_config.load_agents()
+    research = next(a for a in agents if a["id"] == "research")
+    assert research["status"] == "waiting"
+    assert report["id"] in research["report_history"]
+
+
 def test_reports_for_queue_buckets(atlas_data_dir):
     today = atlas_agents._today_utc()
     atlas_config.save_reports([

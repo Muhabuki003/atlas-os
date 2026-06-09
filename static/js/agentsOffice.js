@@ -1,27 +1,70 @@
-// Atlas OS — Agents Office operations floor
+// Atlas OS — Atlas Headquarters / The Atlas Council
 
-const POD_LAYOUT = [
-  { id: 'developer', pos: 'tl' },
-  { id: 'architect', pos: 'tr' },
-  { id: 'research', pos: 'ml' },
-  { id: 'marketing', pos: 'mr' },
-  { id: 'business', pos: 'bc' },
+import AtlasVoiceContext from './atlasVoiceContext.js';
+
+const COUNCIL_ORDER = ['research', 'business', 'architect', 'developer', 'marketing'];
+
+const COUNCIL_LAYOUT = [
+  { id: 'research', pos: 'research', icon: '◎', short: 'R&D' },
+  { id: 'business', pos: 'business', icon: '◆', short: 'BIZ' },
+  { id: 'architect', pos: 'architect', icon: '⬡', short: 'ARC' },
+  { id: 'developer', pos: 'developer', icon: '▣', short: 'DEV' },
+  { id: 'marketing', pos: 'marketing', icon: '△', short: 'MKT' },
 ];
 
+const STAGE_NEXT = {
+  research: 'business',
+  business: 'architect',
+  architect: 'developer',
+  developer: 'marketing',
+};
+
+const STAGE_AGENT = {
+  research: 'research',
+  business: 'business',
+  architect: 'architect',
+  developer: 'developer',
+  marketing: 'marketing',
+};
+
+const AGENT_REPORT_TYPES = {
+  research: [
+    { id: 'research_report', label: 'Research Report' },
+  ],
+  business: [
+    { id: 'business_proposal', label: 'Business Proposal' },
+  ],
+  architect: [
+    { id: 'architecture_plan', label: 'Architecture Plan' },
+  ],
+  developer: [
+    { id: 'developer_cursor_prompt', label: 'Developer Cursor Prompt' },
+  ],
+  marketing: [
+    { id: 'marketing_launch_plan', label: 'Marketing Launch Plan' },
+  ],
+};
+
 const CONTROL_ACTIONS = [
-  { id: 'developer_review', label: 'Run Developer Review', agent_id: 'developer', action: 'developer_review' },
-  { id: 'research_brief', label: 'Start Research Brief', agent_id: 'research', action: 'research_brief' },
-  { id: 'marketing_ideas', label: 'Generate Marketing Ideas', agent_id: 'marketing', action: 'marketing_ideas' },
-  { id: 'business_ask', label: 'Ask Business Agent', agent_id: 'business', action: 'business_strategy' },
-  { id: 'sync', label: 'Sync Agents', agent_id: 'developer', action: 'sync_agents' },
+  { id: 'research_brief', label: 'Research Brief', agent_id: 'research', action: 'market_opportunity_report' },
+  { id: 'business_ask', label: 'Monetisation Report', agent_id: 'business', action: 'monetisation_report' },
+  { id: 'architect_plan', label: 'Architecture Review', agent_id: 'architect', action: 'architecture_review' },
+  { id: 'developer_review', label: 'Codebase Review', agent_id: 'developer', action: 'codebase_review' },
+  { id: 'marketing_ideas', label: 'Launch Strategy', agent_id: 'marketing', action: 'launch_strategy' },
+  { id: 'sync', label: 'Sync Council', agent_id: 'developer', action: 'sync_agents' },
 ];
 
 let _deps = {};
 let _agents = [];
 let _reports = [];
+let _projects = [];
 let _queue = { pending: [], waiting_for_approval: [], completed_today: [] };
+let _council = null;
+let _briefingV2 = null;
+let _briefingFetchedAt = 0;
 let _workingAgents = new Set();
 let _activeReportId = null;
+let _activeAgentOfficeId = null;
 let _linesRaf = 0;
 let _linesRunning = false;
 
@@ -39,11 +82,10 @@ function _esc(s) {
 
 function _statusLabel(status) {
   const map = {
-    idle: 'Idle',
-    ready: 'Ready',
-    thinking: 'Working',
-    waiting: 'Waiting',
-    working: 'Working',
+    idle: 'Idle', ready: 'Ready', thinking: 'Working', waiting: 'Waiting',
+    working: 'Working', pending: 'Pending', generating: 'Generating',
+    waiting_for_review: 'Awaiting Approval', revision_requested: 'Revision',
+    approved: 'Approved', archived: 'Archived',
   };
   return map[status] || status;
 }
@@ -56,6 +98,75 @@ function _statusClass(status) {
 function _agentStatus(agent) {
   if (_workingAgents.has(agent.id)) return 'working';
   return agent.status;
+}
+
+function _projectId(report) {
+  return report?.linked_project_id || report?.project_id || '';
+}
+
+function _projectLabel(pid) {
+  if (!pid) return 'General Council Report';
+  const p = _projects.find(x => x.id === pid);
+  return p?.name || pid;
+}
+
+function _projectMeta(pid) {
+  const p = _projects.find(x => x.id === pid);
+  if (!p) return null;
+  return {
+    name: p.name,
+    score: p.potential_score ?? p.summary_v2?.potential_score,
+    stage: p.current_stage ?? p.summary_v2?.current_stage,
+  };
+}
+
+function _reportsForAgent(agentId) {
+  return _reports.filter(r => r.agent_id === agentId);
+}
+
+function _bucketReports(agentId) {
+  const all = _reportsForAgent(agentId);
+  return {
+    pending: all.filter(r => ['pending', 'generating', 'revision_requested'].includes(r.status)),
+    waiting: all.filter(r => r.status === 'waiting_for_review'),
+    approved: all.filter(r => r.status === 'approved'),
+    archived: all.filter(r => r.status === 'archived'),
+  };
+}
+
+async function _fetchProjects() {
+  try {
+    const res = await fetch('/api/atlas/projects', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+    _projects = Array.isArray(data.projects) ? data.projects : [];
+  } catch (_) {
+    _projects = [];
+  }
+}
+
+async function _fetchCouncil() {
+  try {
+    const res = await fetch('/api/atlas/council', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+    _council = data.council || null;
+  } catch (_) {
+    _council = null;
+  }
+}
+
+async function _getBriefingV2(force = false) {
+  if (!force && _briefingV2 && Date.now() - _briefingFetchedAt < 120000) {
+    return _briefingV2;
+  }
+  try {
+    const res = await fetch('/api/atlas/briefing/v2', { credentials: 'same-origin' });
+    if (!res.ok) return _briefingV2;
+    _briefingV2 = await res.json();
+    _briefingFetchedAt = Date.now();
+  } catch (_) {}
+  return _briefingV2;
 }
 
 async function _fetchReports() {
@@ -83,7 +194,13 @@ async function _fetchAgents() {
 }
 
 export async function refreshAgentsOffice() {
-  await Promise.all([_fetchAgents(), _fetchReports()]);
+  await Promise.all([
+    _fetchAgents(),
+    _fetchReports(),
+    _fetchProjects(),
+    _fetchCouncil(),
+    _getBriefingV2(),
+  ]);
   _renderAll();
 }
 
@@ -94,23 +211,25 @@ function _setAgentWorking(agentId, working) {
   _renderControls();
 }
 
-async function _runAction(agentId, action) {
+async function _runAction(agentId, action, projectId) {
   const btn = document.querySelector(`[data-agent-id="${agentId}"][data-action="${action}"]`);
   if (btn) btn.disabled = true;
   _setAgentWorking(agentId, true);
   try {
+    const body = { agent_id: agentId, action };
+    if (projectId) body.project_id = projectId;
     const res = await fetch('/api/atlas/agents/run', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: agentId, action }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (_deps.showToast) _deps.showToast(data.message || (data.ok ? 'Report ready' : 'Action failed'));
     if (data.agents) _agents = data.agents;
     if (data.report) {
       await _fetchReports();
-      _openReport(data.report.id);
+      openReport(data.report.id);
     } else {
       await refreshAgentsOffice();
     }
@@ -121,9 +240,27 @@ async function _runAction(agentId, action) {
   } finally {
     _setAgentWorking(agentId, false);
     if (btn) btn.disabled = false;
-    _renderReports();
     _renderPods();
+    _renderSidebar();
   }
+}
+
+function _deptName(agent) {
+  const d = agent.department || agent.id || 'Operations';
+  return d.endsWith(' Department') ? d : `${d} Department`;
+}
+
+function _linkedProjectLine(agent) {
+  const reports = _reportsForAgent(agent.id);
+  const latest = reports.find(r => _projectId(r)) || reports[0];
+  if (!latest) return '—';
+  const pid = _projectId(latest);
+  const meta = _projectMeta(pid);
+  if (!meta) return _projectLabel(pid);
+  const bits = [meta.name];
+  if (meta.score != null) bits.push(`${meta.score}/100`);
+  if (meta.stage) bits.push(meta.stage);
+  return bits.join(' · ');
 }
 
 function _renderPods() {
@@ -131,54 +268,83 @@ function _renderPods() {
   if (!wrap) return;
   const byId = Object.fromEntries(_agents.map(a => [a.id, a]));
 
-  wrap.innerHTML = POD_LAYOUT.map(({ id, pos }) => {
+  wrap.classList.add('atlas-council-grid');
+  wrap.innerHTML = COUNCIL_LAYOUT.map(({ id, pos, icon, short }) => {
     const a = byId[id];
     if (!a) return '';
     const st = _statusClass(_agentStatus(a));
+    const count = _reportsForAgent(id).length;
+    const waiting = _bucketReports(id).waiting.length;
+    const task = _workingAgents.has(id) ? 'Generating…' : (a.current_task || '—');
+    const project = _linkedProjectLine(a);
     return `
-      <article class="atlas-agent-pod atlas-agent-pod--${pos}${_workingAgents.has(id) ? ' atlas-agent-pod--working' : ''}" data-agent-id="${_esc(a.id)}">
+      <article class="atlas-agent-pod atlas-agent-pod--${pos}${_workingAgents.has(id) ? ' atlas-agent-pod--working' : ''}"
+        data-agent-id="${_esc(a.id)}" data-agent-office="${_esc(a.id)}" role="button" tabindex="0"
+        aria-label="Open ${_esc(_deptName(a))}">
         <header class="atlas-agent-pod-head">
-          <span class="atlas-agent-pod-dept">${_esc(a.department || 'Operations')}</span>
-          <span class="atlas-agent-pod-status atlas-agent-pod-status--${_esc(st)}">${_workingAgents.has(id) ? 'Working' : _statusLabel(a.status)}</span>
+          <span class="atlas-agent-pod-icon" aria-hidden="true">${icon}</span>
+          <div class="atlas-agent-pod-head-text">
+            <span class="atlas-agent-pod-dept">${_esc(_deptName(a))}</span>
+            <span class="atlas-agent-pod-code">${short}</span>
+          </div>
+          <span class="atlas-agent-pod-status atlas-agent-pod-status--${_esc(st)}">${_workingAgents.has(id) ? 'Work' : _statusLabel(a.status)}</span>
         </header>
         <h3 class="atlas-agent-pod-name">${_esc(a.name)}</h3>
-        <p class="atlas-agent-pod-role">${_esc(a.role || '')}</p>
-        <dl class="atlas-agent-pod-meta">
-          <div><dt>Current task</dt><dd>${_esc(_workingAgents.has(id) ? 'Generating report…' : (a.current_task || '—'))}</dd></div>
-          <div><dt>Last report</dt><dd>${_esc(a.last_report || '—')}</dd></div>
-          ${a.waiting_on ? `<div class="atlas-agent-pod-waiting"><dt>Waiting on</dt><dd>${_esc(a.waiting_on)}</dd></div>` : ''}
-        </dl>
+        <ul class="atlas-agent-pod-lines">
+          <li><span>Task</span><em>${_esc(task)}</em></li>
+          <li><span>Wait</span><em>${_esc(a.waiting_on || (waiting ? `${waiting} approval` : '—'))}</em></li>
+          <li><span>Project</span><em>${_esc(project)}</em></li>
+        </ul>
+        <footer class="atlas-agent-pod-foot">
+          <span class="atlas-agent-pod-count">${count}r</span>
+          ${waiting ? `<span class="atlas-agent-pod-approval">${waiting}✓</span>` : ''}
+        </footer>
       </article>
     `;
   }).join('');
 }
 
-function _reportItem(r) {
-  const title = r.title || r.summary || 'Report';
-  const detail = r.summary || r.agent_name || '';
-  return `
-    <li class="atlas-reports-item" data-report-id="${_esc(r.id)}" role="button" tabindex="0">
-      <span class="atlas-reports-agent">${_esc(r.agent_name || r.agent_id || 'Agent')}</span>
-      <span class="atlas-reports-detail">${_esc(title)}</span>
-      ${detail && detail !== title ? `<span class="atlas-reports-snippet">${_esc(detail)}</span>` : ''}
-    </li>
+function _renderBriefingStrip() {
+  const strip = _el('atlas-hq-briefing-strip');
+  if (!strip) return;
+  const v = _briefingV2?.visual || {};
+  const approval = (_queue.waiting_for_approval || []).length;
+  const top = (v.priorities || [])[0];
+  strip.innerHTML = `
+    <span class="atlas-hq-strip-item">${_esc(v.greeting || 'Atlas Council online')}</span>
+    <span class="atlas-hq-strip-item">${approval} pending approval${approval === 1 ? '' : 's'}</span>
+    ${top ? `<span class="atlas-hq-strip-item atlas-hq-strip-priority">Priority: ${_esc(top.name)}${top.potential_score != null ? ` (${top.potential_score})` : ''}</span>` : ''}
+    ${v.recommendation ? `<span class="atlas-hq-strip-rec">${_esc(v.recommendation)}</span>` : ''}
   `;
 }
 
-function _fillReportList(elId, items, empty) {
-  const el = _el(elId);
-  if (!el) return;
-  if (!items.length) {
-    el.innerHTML = `<li class="atlas-reports-empty">${_esc(empty)}</li>`;
-    return;
-  }
-  el.innerHTML = items.map(_reportItem).join('');
-}
-
-function _renderReports() {
-  _fillReportList('atlas-reports-pending', _queue.pending || [], 'No pending reports');
-  _fillReportList('atlas-reports-approval', _queue.waiting_for_approval || [], 'Nothing awaiting approval');
-  _fillReportList('atlas-reports-completed', _queue.completed_today || [], 'No completed reports today');
+function _renderSidebar() {
+  _renderBriefingStrip();
+  const cards = _el('atlas-hq-status-cards');
+  if (!cards) return;
+  const approval = (_queue.waiting_for_approval || []).length;
+  const pending = (_queue.pending || []).length;
+  const v = _briefingV2?.visual || {};
+  const top = (v.priorities || [])[0];
+  cards.innerHTML = `
+    <div class="atlas-hq-status-card">
+      <span class="atlas-hq-status-label">Awaiting approval</span>
+      <strong class="atlas-hq-status-value">${approval}</strong>
+    </div>
+    <div class="atlas-hq-status-card">
+      <span class="atlas-hq-status-label">In progress</span>
+      <strong class="atlas-hq-status-value">${pending}</strong>
+    </div>
+    <div class="atlas-hq-status-card atlas-hq-status-card--wide">
+      <span class="atlas-hq-status-label">Top project</span>
+      <strong class="atlas-hq-status-value">${_esc(top?.name || '—')}</strong>
+      ${top?.stage ? `<span class="atlas-hq-status-meta">${_esc(top.stage)}${top.potential_score != null ? ` · ${top.potential_score}/100` : ''}</span>` : ''}
+    </div>
+    <div class="atlas-hq-status-card atlas-hq-status-card--wide">
+      <span class="atlas-hq-status-label">Recommendation</span>
+      <p class="atlas-hq-status-rec">${_esc(v.recommendation || 'Refresh briefing on Home for latest guidance.')}</p>
+    </div>
+  `;
 }
 
 function _renderControls() {
@@ -186,15 +352,13 @@ function _renderControls() {
   if (!bar) return;
   bar.innerHTML = CONTROL_ACTIONS.map(c => {
     const busy = _workingAgents.has(c.agent_id);
-    return `
-      <button type="button" class="atlas-agents-ctrl-btn" data-agent-id="${_esc(c.agent_id)}" data-action="${_esc(c.action)}"${busy ? ' disabled' : ''}>${_esc(c.label)}</button>
-    `;
+    return `<button type="button" class="atlas-agents-ctrl-btn" data-agent-id="${_esc(c.agent_id)}" data-action="${_esc(c.action)}"${busy ? ' disabled' : ''}>${_esc(c.label)}</button>`;
   }).join('');
 }
 
 function _renderAll() {
   _renderPods();
-  _renderReports();
+  _renderSidebar();
   _renderControls();
   requestAnimationFrame(() => {
     if (_linesRunning) _drawConnectionLines();
@@ -226,28 +390,74 @@ function _closeReportModal() {
   const modal = _el('atlas-report-modal');
   if (!modal) return;
   modal.classList.add('hidden');
+  modal.classList.remove('atlas-report-modal--stacked');
   modal.setAttribute('aria-hidden', 'true');
   _activeReportId = null;
+  AtlasVoiceContext.clear('report');
+  if (_activeAgentOfficeId) {
+    AtlasVoiceContext.set({ currentModal: 'agent_office' });
+  } else {
+    AtlasVoiceContext.clear('modal');
+  }
 }
 
-function _openReport(reportId) {
+export function openReport(reportId) {
   const report = _findReport(reportId);
-  if (!report) return;
-  _activeReportId = reportId;
+  if (!report) {
+    fetch(`/api/atlas/reports/${reportId}`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then((data) => {
+        if (data.ok && data.report) {
+          _reports.unshift(data.report);
+          _openReportPanel(data.report);
+        }
+      });
+    return;
+  }
+  _openReportPanel(report);
+}
+
+function _openReportPanel(report) {
+  _activeReportId = report.id;
   const modal = _el('atlas-report-modal');
+  if (modal && _activeAgentOfficeId) {
+    modal.classList.add('atlas-report-modal--stacked');
+  }
   const agentEl = _el('atlas-report-modal-agent');
   const titleEl = _el('atlas-report-modal-title');
   const metaEl = _el('atlas-report-modal-meta');
+  const badgesEl = _el('atlas-report-modal-badges');
+  const contextEl = _el('atlas-report-modal-context');
   const summaryEl = _el('atlas-report-modal-summary');
   const bodyEl = _el('atlas-report-modal-body');
   const actionsEl = _el('atlas-report-modal-actions');
   if (!modal || !titleEl || !bodyEl) return;
 
+  const pid = _projectId(report);
+  const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
+  const status = _statusLabel(report.status);
+
   if (agentEl) agentEl.textContent = report.agent_name || report.agent_id || 'Agent';
   titleEl.textContent = report.title || 'Report';
   if (metaEl) {
-    const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
-    metaEl.textContent = [report.status?.replace(/_/g, ' '), created].filter(Boolean).join(' · ');
+    metaEl.textContent = [
+      _projectLabel(pid),
+      report.title || 'Report',
+      created,
+    ].filter(Boolean).join(' · ');
+  }
+  if (badgesEl) {
+    badgesEl.innerHTML = `
+      <span class="atlas-report-badge atlas-report-badge--status">${_esc(status)}</span>
+      ${report.requires_approval ? '<span class="atlas-report-badge atlas-report-badge--approval">Approval required</span>' : ''}
+      ${report.next_agent_suggestion ? `<span class="atlas-report-badge">Next: ${_esc(report.next_agent_suggestion)}</span>` : ''}
+    `;
+  }
+  if (contextEl) {
+    const meta = _projectMeta(pid);
+    contextEl.innerHTML = meta ? `
+      <p><strong>Project context</strong> ${_esc(meta.name)}${meta.score != null ? ` · Score ${meta.score}/100` : ''}${meta.stage ? ` · ${_esc(meta.stage)}` : ''}</p>
+    ` : (pid ? '' : '<p><strong>General Council Report</strong> — not linked to a project.</p>');
   }
   if (summaryEl) {
     summaryEl.textContent = report.summary || '';
@@ -256,24 +466,85 @@ function _openReport(reportId) {
   bodyEl.innerHTML = _formatReportContent(report.content);
 
   if (actionsEl) {
-    const actions = Array.isArray(report.actions) ? report.actions : [];
-    if (report.status === 'waiting_for_review' && actions.length) {
-      actionsEl.innerHTML = actions.map(a => `
-        <button type="button" class="atlas-report-action-btn atlas-report-action-btn--${_esc(a)}" data-report-action="${_esc(a)}">${_esc(a)}</button>
-      `).join('');
-      actionsEl.style.display = '';
-    } else {
-      actionsEl.innerHTML = '';
-      actionsEl.style.display = 'none';
-    }
+    const canAct = report.status === 'waiting_for_review';
+    const nextAgent = report.next_agent_suggestion;
+    const hasProject = !!pid;
+    actionsEl.innerHTML = `
+      ${canAct ? '<button type="button" class="atlas-report-action-btn atlas-report-action-btn--approve" data-report-action="approve">Approve</button>' : ''}
+      ${canAct ? '<button type="button" class="atlas-report-action-btn" data-report-action="revise">Request Revision</button>' : ''}
+      <button type="button" class="atlas-report-action-btn" data-report-action="archive">Archive</button>
+      ${canAct && nextAgent && hasProject ? '<button type="button" class="atlas-report-action-btn atlas-report-action-btn--send" data-report-action="send_next">Send to Next Agent</button>' : ''}
+      ${hasProject ? `<button type="button" class="atlas-report-action-btn" data-report-action="open_project" data-project-id="${_esc(pid)}">Open Project</button>` : ''}
+      <button type="button" class="atlas-report-action-btn" data-report-action="ask_atlas">Ask Atlas About This</button>
+    `;
   }
+
+  AtlasVoiceContext.set({
+    currentModal: 'report',
+    currentReportId: report.id,
+    currentReportTitle: report.title || 'Report',
+    currentAgentId: report.agent_id || AtlasVoiceContext.get().currentAgentId,
+    currentAgentName: report.agent_name || AtlasVoiceContext.get().currentAgentName,
+  });
 
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
 }
 
-async function _reportAction(action) {
+function _agentStage(agentId) {
+  return COUNCIL_ORDER.find(s => STAGE_AGENT[s] === agentId) || null;
+}
+
+async function _sendToNextAgent(report) {
+  const pid = _projectId(report);
+  const stage = _agentStage(report.agent_id);
+  const nextStage = stage ? STAGE_NEXT[stage] : null;
+  if (!pid || !nextStage) {
+    if (_deps.showToast) _deps.showToast('No linked project or next stage for this report');
+    return;
+  }
+  const agentName = STAGE_AGENT[nextStage] || nextStage;
+  const ok = window.confirm(
+    `Send council review to ${nextStage} agent for ${_projectLabel(pid)}?\n\nThis will generate a new report — nothing runs until you confirm.`
+  );
+  if (!ok) return;
+  const res = await fetch(`/api/atlas/council/review/${pid}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stage: nextStage }),
+  });
+  const data = await res.json();
+  if (_deps.showToast) _deps.showToast(data.message || (data.ok ? 'Next stage started' : 'Failed'));
+  if (data.ok) {
+    await refreshAgentsOffice();
+    if (data.report?.id) openReport(data.report.id);
+    if (window.atlasPipelineRefresh) window.atlasPipelineRefresh();
+  }
+}
+
+async function _reportAction(action, extra = {}) {
   if (!_activeReportId) return;
+  const report = _findReport(_activeReportId);
+
+  if (action === 'open_project' && extra.projectId) {
+    const hq = await import('./atlasProjectHQ.js');
+    _closeReportModal();
+    await hq.default.openProjectHQ(extra.projectId);
+    return;
+  }
+
+  if (action === 'ask_atlas') {
+    const prompt = `Review this council report and advise next steps:\n\n**${report?.title || 'Report'}**\n${report?.summary || ''}`;
+    if (_deps.openAssistant) _deps.openAssistant(prompt, { submit: false });
+    return;
+  }
+
+  if (action === 'send_next') {
+    if (report) await _sendToNextAgent(report);
+    return;
+  }
+
   try {
     const res = await fetch(`/api/atlas/reports/${_activeReportId}/action`, {
       method: 'POST',
@@ -288,15 +559,335 @@ async function _reportAction(action) {
     if (data.report) {
       const idx = _reports.findIndex(r => r.id === data.report.id);
       if (idx >= 0) _reports[idx] = data.report;
-      _openReport(data.report.id);
+      _openReportPanel(data.report);
     }
-    _renderReports();
     _renderPods();
+    _renderSidebar();
     if (action === 'approve' && window.atlasPipelineRefresh) window.atlasPipelineRefresh();
     if (action === 'archive') _closeReportModal();
+    if (_activeAgentOfficeId) _openAgentOffice(_activeAgentOfficeId);
   } catch (_) {
     if (_deps.showToast) _deps.showToast('Report action failed');
   }
+}
+
+function _closeAgentOffice() {
+  const modal = _el('atlas-agent-office-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  _activeAgentOfficeId = null;
+  AtlasVoiceContext.clear('agent');
+  AtlasVoiceContext.clear('modal');
+}
+
+function _officeReportRow(r) {
+  const pid = _projectId(r);
+  const created = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+  return `
+    <li class="atlas-office-report" data-report-id="${_esc(r.id)}" role="button" tabindex="0">
+      <div class="atlas-office-report-head">
+        <strong>${_esc(r.title || 'Report')}</strong>
+        <span class="atlas-office-report-status">${_esc(_statusLabel(r.status))}</span>
+      </div>
+      <p class="atlas-office-report-meta">${_esc(_projectLabel(pid))} · ${_esc(created)}</p>
+      <p class="atlas-office-report-summary">${_esc((r.summary || '').slice(0, 140))}</p>
+    </li>
+  `;
+}
+
+function _populateAgentMessageControls(agentId) {
+  const projectSel = _el('atlas-agent-message-project');
+  const typeSel = _el('atlas-agent-message-type');
+  if (projectSel) {
+    const current = projectSel.value;
+    projectSel.innerHTML = '<option value="">General (no project)</option>'
+      + _projects.map(p => `<option value="${_esc(p.id)}">${_esc(p.name)}</option>`).join('');
+    if (current) projectSel.value = current;
+  }
+  if (typeSel) {
+    const types = AGENT_REPORT_TYPES[agentId] || [{ id: 'research_report', label: 'Report' }];
+    typeSel.innerHTML = types.map(t => `<option value="${_esc(t.id)}">${_esc(t.label)}</option>`).join('');
+  }
+}
+
+function _renderAgentInbox(agent, buckets) {
+  const inbox = _el('atlas-agent-office-inbox');
+  if (!inbox) return;
+  const waiting = buckets.waiting;
+  inbox.innerHTML = `
+    <h3 class="atlas-agent-section-title">Agent Inbox</h3>
+    <dl class="atlas-agent-inbox-meta">
+      <div><dt>Status</dt><dd>${_esc(_statusLabel(_agentStatus(agent)))}</dd></div>
+      <div><dt>Current task</dt><dd class="atlas-agent-inbox-ellipsis">${_esc(agent.current_task || '—')}</dd></div>
+      <div><dt>Waiting on</dt><dd class="atlas-agent-inbox-ellipsis">${_esc(agent.waiting_on || '—')}</dd></div>
+      <div><dt>Pending reports</dt><dd>${buckets.pending.length}</dd></div>
+      <div><dt>Awaiting approval</dt><dd>${waiting.length}</dd></div>
+    </dl>
+    ${waiting.length ? `
+      <h4 class="atlas-agent-inbox-sub">Waiting for approval</h4>
+      <ul class="atlas-agent-inbox-list">
+        ${waiting.slice(0, 5).map(r => `
+          <li><button type="button" class="atlas-agent-inbox-link" data-report-id="${_esc(r.id)}">${_esc((r.title || 'Report').slice(0, 48))}</button></li>
+        `).join('')}
+      </ul>
+    ` : '<p class="atlas-agent-inbox-empty">No reports awaiting approval.</p>'}
+  `;
+}
+
+function _openAgentOffice(agentId) {
+  const agent = _agents.find(a => a.id === agentId);
+  if (!agent) return;
+  _activeAgentOfficeId = agentId;
+  const modal = _el('atlas-agent-office-modal');
+  const buckets = _bucketReports(agentId);
+
+  _el('atlas-agent-office-dept').textContent = _deptName(agent);
+  _el('atlas-agent-office-title').textContent = agent.name;
+  _el('atlas-agent-office-role').textContent = agent.role || '';
+
+  _renderAgentInbox(agent, buckets);
+  _populateAgentMessageControls(agentId);
+
+  const input = _el('atlas-agent-message-input');
+  if (input && !input.dataset.touched) input.value = '';
+
+  const sections = [
+    ['Pending', buckets.pending],
+    ['Waiting for Approval', buckets.waiting],
+    ['Approved', buckets.approved],
+    ['Archived', buckets.archived],
+  ];
+
+  _el('atlas-agent-office-reports').innerHTML = sections.map(([label, items]) => `
+    <section class="atlas-office-report-section">
+      <h3>${_esc(label)} <span class="atlas-office-count">${items.length}</span></h3>
+      <ul class="atlas-office-report-list">
+        ${items.length ? items.map(_officeReportRow).join('') : '<li class="atlas-office-empty">None</li>'}
+      </ul>
+    </section>
+  `).join('');
+
+  AtlasVoiceContext.set({
+    currentModal: 'agent_office',
+    currentAgentId: agentId,
+    currentAgentName: agent.name,
+    currentSelectionType: 'agent',
+    currentSelectionLabel: agent.name,
+  });
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+export function openAgent(agentId) {
+  _openAgentOffice(agentId);
+}
+
+export function focusAgentMessage(agentId) {
+  if (agentId && agentId !== _activeAgentOfficeId) _openAgentOffice(agentId);
+  const input = _el('atlas-agent-message-input');
+  if (input) {
+    input.focus();
+    input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+export function setAgentReportType(agentId, reportType) {
+  if (agentId && agentId !== _activeAgentOfficeId) _openAgentOffice(agentId);
+  const typeSel = _el('atlas-agent-message-type');
+  if (typeSel && reportType) typeSel.value = reportType;
+}
+
+export async function sendAgentMessage(agentId, message, projectId, reportType) {
+  if (agentId && agentId !== _activeAgentOfficeId) _openAgentOffice(agentId);
+  const input = _el('atlas-agent-message-input');
+  if (input) input.value = message || '';
+  if (projectId) {
+    const projectSel = _el('atlas-agent-message-project');
+    if (projectSel) projectSel.value = projectId;
+  }
+  if (reportType) setAgentReportType(agentId, reportType);
+  _activeAgentOfficeId = agentId;
+  return _sendAgentMessage();
+}
+
+export async function openLatestReport(agentId) {
+  const aid = agentId || _activeAgentOfficeId;
+  if (!aid) return false;
+  const buckets = _bucketReports(aid);
+  const latest = buckets.waiting[0] || buckets.pending[0] || _reportsForAgent(aid)[0];
+  if (!latest) return false;
+  openReport(latest.id);
+  return true;
+}
+
+export async function openReportByTitle(query, agentId) {
+  const aid = agentId || _activeAgentOfficeId;
+  const q = String(query || '').toLowerCase();
+  const match = _reports.find((r) => {
+    if (aid && r.agent_id !== aid) return false;
+    const title = (r.title || '').toLowerCase();
+    return title.includes(q) || q.includes(title);
+  });
+  if (!match) return false;
+  openReport(match.id);
+  return true;
+}
+
+export async function actOnReport(reportId, action) {
+  _activeReportId = reportId;
+  await _reportAction(action);
+  return true;
+}
+
+export async function closeActiveModal() {
+  if (_activeReportId) {
+    _closeReportModal();
+    return true;
+  }
+  if (_activeAgentOfficeId) {
+    _closeAgentOffice();
+    return true;
+  }
+  const council = _el('atlas-council-modal');
+  if (council && !council.classList.contains('hidden')) {
+    _closeCouncilModal();
+    return true;
+  }
+  const hq = _el('atlas-project-hq');
+  if (hq && !hq.classList.contains('hidden')) {
+    const mod = await import('./atlasProjectHQ.js');
+    mod.default.closeProjectHQ?.();
+    return true;
+  }
+  return false;
+}
+
+async function _sendAgentMessage() {
+  if (!_activeAgentOfficeId) return;
+  const input = _el('atlas-agent-message-input');
+  const message = (input?.value || '').trim();
+  if (!message) {
+    if (_deps.showToast) _deps.showToast('Enter a message for the agent');
+    return;
+  }
+  const projectId = _el('atlas-agent-message-project')?.value || '';
+  const reportType = _el('atlas-agent-message-type')?.value || '';
+  const sendBtn = _el('atlas-agent-message-send');
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.dataset.touched = '1';
+  _setAgentWorking(_activeAgentOfficeId, true);
+
+  try {
+    const body = { message };
+    if (projectId) body.project_id = projectId;
+    if (reportType) body.report_type = reportType;
+    const res = await fetch(`/api/atlas/agents/${_activeAgentOfficeId}/message`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (_deps.showToast) _deps.showToast(data.message || (data.ok ? 'Report ready' : 'Message failed'));
+    if (data.agents) _agents = data.agents;
+    if (data.ok && data.report) {
+      await _fetchReports();
+      if (input) input.value = '';
+      delete input?.dataset.touched;
+      _openAgentOffice(_activeAgentOfficeId);
+      openReport(data.report.id);
+    } else {
+      await refreshAgentsOffice();
+      if (_activeAgentOfficeId) _openAgentOffice(_activeAgentOfficeId);
+    }
+  } catch (_) {
+    if (_deps.showToast) _deps.showToast('Failed to send message to agent');
+  } finally {
+    _setAgentWorking(_activeAgentOfficeId, false);
+    if (sendBtn) sendBtn.disabled = false;
+  }
+}
+
+function _closeCouncilModal() {
+  const modal = _el('atlas-council-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+async function _openCouncilModal() {
+  await _getBriefingV2();
+  const modal = _el('atlas-council-modal');
+  const body = _el('atlas-council-modal-body');
+  const sub = _el('atlas-council-modal-sub');
+  if (!modal || !body) return;
+
+  const v = _briefingV2?.visual || {};
+  const approval = _queue.waiting_for_approval || [];
+  const deepReports = _reports.filter(r => {
+    const t = (r.title || '').toLowerCase();
+    return t.includes('market') || t.includes('monetisation') || t.includes('architecture')
+      || t.includes('codebase') || t.includes('launch');
+  }).slice(0, 6);
+
+  const projectReviews = [...new Set(
+    approval.map(r => _projectId(r)).filter(Boolean)
+  )].map(pid => {
+    const meta = _projectMeta(pid);
+    return meta ? { id: pid, ...meta } : { id: pid, name: pid };
+  });
+
+  const nextDecision = approval[0]
+    ? `Approve "${approval[0].title}" from ${approval[0].agent_name} (${_projectLabel(_projectId(approval[0]))})`
+    : (v.recommendation || 'Run a council review on your top-priority project.');
+
+  if (sub) {
+    sub.textContent = _council?.rules?.[0] || 'Reports only — approval required between stages.';
+  }
+
+  const members = COUNCIL_ORDER.map(id => {
+    const a = _agents.find(x => x.id === id);
+    return a ? `<li><strong>${_esc(_deptName(a))}</strong> — ${_esc(a.name)} · ${_esc(_statusLabel(_agentStatus(a)))}</li>` : '';
+  }).join('');
+
+  body.innerHTML = `
+    <section class="atlas-council-section">
+      <h3>1. Council Members</h3>
+      <ul class="atlas-council-list">${members}</ul>
+    </section>
+    <section class="atlas-council-section">
+      <h3>2. Active Project Reviews</h3>
+      ${projectReviews.length ? `<ul class="atlas-council-list">${projectReviews.map(p => `
+        <li><strong>${_esc(p.name)}</strong>${p.score != null ? ` · ${p.score}/100` : ''}${p.stage ? ` · ${_esc(p.stage)}` : ''}</li>
+      `).join('')}</ul>` : '<p class="atlas-council-empty">No projects awaiting council approval.</p>'}
+    </section>
+    <section class="atlas-council-section">
+      <h3>3. Reports Waiting for Approval</h3>
+      ${approval.length ? `<ul class="atlas-council-list">${approval.slice(0, 8).map(r => `
+        <li><button type="button" class="atlas-council-report-link" data-report-id="${_esc(r.id)}">${_esc(r.title)}</button> — ${_esc(_projectLabel(_projectId(r)))}</li>
+      `).join('')}</ul>` : '<p class="atlas-council-empty">Nothing awaiting approval.</p>'}
+    </section>
+    <section class="atlas-council-section">
+      <h3>4. Recent Council Reports</h3>
+      ${deepReports.length ? `<ul class="atlas-council-list">${deepReports.map(r => `
+        <li><button type="button" class="atlas-council-report-link" data-report-id="${_esc(r.id)}">${_esc(r.title)}</button></li>
+      `).join('')}</ul>` : '<p class="atlas-council-empty">No recent council reports.</p>'}
+    </section>
+    <section class="atlas-council-section">
+      <h3>5. Daily Briefing</h3>
+      <p>${_esc(v.headline || '')}</p>
+      <p class="atlas-council-rec">${_esc(v.recommendation || '')}</p>
+    </section>
+    <section class="atlas-council-section atlas-council-section--decision">
+      <h3>6. Recommended Next Decision</h3>
+      <p class="atlas-council-decision">${_esc(nextDecision)}</p>
+    </section>
+  `;
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
 }
 
 export function startAgentLines() {
@@ -315,97 +906,177 @@ export function stopAgentLines() {
   }
 }
 
+function _podCenter(pod, rect) {
+  const pr = pod.getBoundingClientRect();
+  return {
+    x: pr.left + pr.width / 2 - rect.left,
+    y: pr.top + pr.height / 2 - rect.top,
+  };
+}
+
 function _drawConnectionLines() {
   if (!_linesRunning) return;
   const canvas = _el('atlas-agents-lines');
   const network = _el('atlas-agents-network');
-  const hub = _el('atlas-agents-core-hub');
-  if (!canvas || !network || !hub) return;
+  const hub = _el('atlas-council-hub');
+  if (!canvas || !network) return;
 
   const rect = network.getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(rect.width * dpr);
   canvas.height = Math.floor(rect.height * dpr);
-  canvas.style.width = rect.width + 'px';
-  canvas.style.height = rect.height + 'px';
+  canvas.style.width = `${rect.width}px`;
+  canvas.style.height = `${rect.height}px`;
 
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
-
-  const hubRect = hub.getBoundingClientRect();
-  const hx = hubRect.left + hubRect.width / 2 - rect.left;
-  const hy = hubRect.top + hubRect.height / 2 - rect.top;
   const t = performance.now() * 0.001;
 
-  document.querySelectorAll('.atlas-agent-pod').forEach((pod, i) => {
-    const pr = pod.getBoundingClientRect();
-    const px = pr.left + pr.width / 2 - rect.left;
-    const py = pr.top + pr.height / 2 - rect.top;
-    const pulse = 0.35 + Math.sin(t * 2 + i) * 0.2;
-    const working = pod.classList.contains('atlas-agent-pod--working');
+  const pods = COUNCIL_ORDER.map(id => document.querySelector(`.atlas-agent-pod[data-agent-id="${id}"]`)).filter(Boolean);
+  const points = pods.map(p => _podCenter(p, rect));
 
-    ctx.strokeStyle = `rgba(80, 200, 255, ${(working ? 0.35 : 0.15) + pulse * 0.25})`;
-    ctx.lineWidth = working ? 1.5 : 1;
-    ctx.setLineDash([6, 10]);
-    ctx.lineDashOffset = -t * 40;
+  function drawSegment(a, b, { alpha = 0.3, width = 1, dash = [6, 10], color = '80, 200, 255', speed = 45 } = {}) {
+    const pulse = 0.25 + Math.sin(t * 2.5) * 0.15;
+    ctx.strokeStyle = `rgba(${color}, ${alpha + pulse * 0.15})`;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash);
+    ctx.lineDashOffset = -t * speed;
     ctx.beginPath();
-    ctx.moveTo(hx, hy);
-    ctx.lineTo(px, py);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
     ctx.stroke();
-
     ctx.setLineDash([]);
+  }
+
+  function drawArrow(a, b, progress) {
+    const px = a.x + (b.x - a.x) * progress;
+    const py = a.y + (b.y - a.y) * progress;
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const size = 5;
+    ctx.fillStyle = 'rgba(100, 220, 255, 0.75)';
     ctx.beginPath();
-    ctx.arc(px, py, working ? 4 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(120, 230, 255, ${(working ? 0.6 : 0.4) + pulse * 0.3})`;
+    ctx.moveTo(px + Math.cos(ang) * size, py + Math.sin(ang) * size);
+    ctx.lineTo(px + Math.cos(ang + 2.6) * size, py + Math.sin(ang + 2.6) * size);
+    ctx.lineTo(px + Math.cos(ang - 2.6) * size, py + Math.sin(ang - 2.6) * size);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  let hubPt = null;
+  if (hub) {
+    const hr = hub.getBoundingClientRect();
+    hubPt = { x: hr.left + hr.width / 2 - rect.left, y: hr.top + hr.height / 2 - rect.top };
+    ctx.beginPath();
+    ctx.arc(hubPt.x, hubPt.y, 11, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(100, 220, 255, ${0.28 + Math.sin(t * 2) * 0.08})`;
+    ctx.fill();
+  }
+
+  if (hubPt) {
+    points.forEach((pt) => {
+      drawSegment(hubPt, pt, { alpha: 0.12, width: 0.8, dash: [3, 12], speed: 20 });
+    });
+  }
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i];
+    const b = points[i + 1];
+    const working = pods[i]?.classList.contains('atlas-agent-pod--working')
+      || pods[i + 1]?.classList.contains('atlas-agent-pod--working');
+    drawSegment(a, b, {
+      alpha: working ? 0.55 : 0.38,
+      width: working ? 2.2 : 1.6,
+      dash: [10, 8],
+      color: '60, 180, 255',
+      speed: 70,
+    });
+    const travel = (t * 0.35 + i * 0.18) % 1;
+    drawArrow(a, b, travel);
+    drawArrow(a, b, (travel + 0.35) % 1);
+  }
+
+  points.forEach((pt, i) => {
+    const working = pods[i]?.classList.contains('atlas-agent-pod--working');
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, working ? 4 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(120, 230, 255, ${working ? 0.8 : 0.5})`;
     ctx.fill();
   });
-
-  ctx.beginPath();
-  ctx.arc(hx, hy, 8, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(100, 220, 255, 0.35)';
-  ctx.fill();
 
   _linesRaf = requestAnimationFrame(_drawConnectionLines);
 }
 
 function _bindEvents() {
-  const controls = _el('atlas-agents-controls');
-  if (controls) {
-    controls.addEventListener('click', async (e) => {
-      const btn = e.target.closest('[data-agent-id][data-action]');
-      if (!btn || btn.disabled) return;
-      await _runAction(btn.dataset.agentId, btn.dataset.action);
+  _el('atlas-agents-controls')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-agent-id][data-action]');
+    if (!btn || btn.disabled) return;
+    await _runAction(btn.dataset.agentId, btn.dataset.action);
+  });
+
+  _el('atlas-council-hub')?.addEventListener('click', () => { void _openCouncilModal(); });
+  _el('atlas-hq-open-council')?.addEventListener('click', () => { void _openCouncilModal(); });
+
+  const office = _el('atlas-agents-office');
+  if (office) {
+    office.addEventListener('click', (e) => {
+      const pod = e.target.closest('[data-agent-office]');
+      if (pod) {
+        _openAgentOffice(pod.dataset.agentOffice);
+        return;
+      }
+    });
+    office.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const pod = e.target.closest('[data-agent-office]');
+      if (!pod) return;
+      e.preventDefault();
+      _openAgentOffice(pod.dataset.agentOffice);
     });
   }
 
-  const reportsPanel = _el('atlas-agents-office');
-  if (reportsPanel) {
-    reportsPanel.addEventListener('click', (e) => {
-      const item = e.target.closest('[data-report-id]');
-      if (!item) return;
-      _openReport(item.dataset.reportId);
-    });
-    reportsPanel.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      const item = e.target.closest('[data-report-id]');
-      if (!item) return;
+  _el('atlas-agent-office-modal')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-atlas-agent-office-close]')) _closeAgentOffice();
+    const row = e.target.closest('[data-report-id]');
+    if (row) openReport(row.dataset.reportId);
+  });
+
+  _el('atlas-agent-message-send')?.addEventListener('click', () => { void _sendAgentMessage(); });
+
+  _el('atlas-agent-message-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      _openReport(item.dataset.reportId);
-    });
-  }
+      void _sendAgentMessage();
+    }
+  });
+
+  _el('atlas-council-modal')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-atlas-council-close]')) _closeCouncilModal();
+    const link = e.target.closest('[data-report-id]');
+    if (link) {
+      _closeCouncilModal();
+      openReport(link.dataset.reportId);
+    }
+  });
 
   const modal = _el('atlas-report-modal');
   if (modal) {
     modal.addEventListener('click', (e) => {
       if (e.target.closest('[data-atlas-report-close]')) _closeReportModal();
       const actionBtn = e.target.closest('[data-report-action]');
-      if (actionBtn) _reportAction(actionBtn.dataset.reportAction);
+      if (actionBtn) {
+        _reportAction(actionBtn.dataset.reportAction, {
+          projectId: actionBtn.dataset.projectId,
+        });
+      }
     });
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _activeReportId) _closeReportModal();
+    if (e.key !== 'Escape') return;
+    if (_activeReportId) _closeReportModal();
+    else if (_activeAgentOfficeId) _closeAgentOffice();
+    else _closeCouncilModal();
   });
 
   window.addEventListener('resize', () => {
@@ -424,6 +1095,27 @@ const agentsOfficeModule = {
   refreshAgentsOffice,
   startAgentLines,
   stopAgentLines,
+  openReport,
+  openAgent,
+  focusAgentMessage,
+  sendAgentMessage,
+  openLatestReport,
+  openReportByTitle,
+  actOnReport,
+  closeActiveModal,
+  setAgentReportType,
+};
+
+window.AtlasAgentsUI = {
+  openAgent,
+  focusAgentMessage,
+  sendAgentMessage,
+  openReport,
+  openLatestReport,
+  openReportByTitle,
+  actOnReport,
+  closeActiveModal,
+  setAgentReportType,
 };
 
 export default agentsOfficeModule;

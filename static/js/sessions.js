@@ -1110,7 +1110,8 @@ function _renderAtlasAssistantSessionsPanel(orderedSessions) {
     try {
       when = ts ? new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     } catch (_) {}
-    const badge = s.active_project_id ? '<span class="atlas-assistant-session-badge">Project</span>' : '';
+    const projLabel = s.active_project_name || s.project_name || (s.active_project_id ? 'Project' : '');
+    const badge = projLabel ? `<span class="atlas-assistant-session-badge">${String(projLabel).replace(/</g, '&lt;').slice(0, 18)}</span>` : '';
     return `<button type="button" class="atlas-assistant-session-item${active}" data-atlas-session-id="${s.id}">
       <span class="atlas-assistant-session-title">${(s.name || 'Chat').replace(/</g, '&lt;')}</span>
       <span class="atlas-assistant-session-meta">${when}${badge}</span>

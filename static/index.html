@@ -436,6 +436,11 @@
               </span>
             </div>
           </div>
+          <div class="admin-card">
+            <h2 style="margin:0">Atlas Reasoning Audit</h2>
+            <span class="admin-toggle-sub" style="display:block;margin-top:6px;opacity:0.7">Read-only check: verifies Atlas uses real workspace/project data instead of stale seed context.</span>
+            <button type="button" id="atlas-run-reasoning-audit-settings" class="atlas-project-btn" style="margin-top:10px">Run Reasoning Audit</button>
+          </div>
         </div>
       </div>
     </div>
@@ -940,29 +945,67 @@
     </div>
   </nav>
 
+  <div id="atlas-cursor-fx" class="atlas-cursor-fx" aria-hidden="true">
+    <div class="atlas-cursor-fx-pointer"></div>
+    <div class="atlas-cursor-fx-glow"></div>
+  </div>
+
   <div id="atlas-os-backdrop" class="atlas-os-backdrop" aria-hidden="true">
     <canvas id="atlas-mc-particles" class="atlas-mc-particles"></canvas>
     <div class="atlas-mc-bg"></div>
     <div class="atlas-mc-scanline"></div>
   </div>
 
-  <section id="atlas-home" class="atlas-home atlas-mc" aria-label="Atlas OS Mission Control">
-    <header class="atlas-mc-briefing-bar" id="atlas-home-briefing" aria-labelledby="atlas-home-briefing-heading">
-      <span id="atlas-home-briefing-heading" class="atlas-mc-briefing-label">Daily Briefing</span>
-      <button type="button" id="atlas-voice-status-chip" class="atlas-voice-status-chip" data-status="idle" title="Voice status — click for settings" aria-label="Voice status">
+  <header id="atlas-os-status-bar" class="atlas-os-status-bar" aria-label="Atlas OS status">
+    <div class="atlas-os-status-ribbon">
+      <button type="button" id="atlas-voice-status-chip" class="atlas-os-status-wake" data-status="idle" title="Voice status" aria-label="Voice status">
         <span class="atlas-voice-status-chip-dot" aria-hidden="true"></span>
         <span class="atlas-voice-status-chip-text">Standby</span>
       </button>
+      <span class="atlas-os-status-sep" aria-hidden="true">|</span>
+      <button type="button" id="atlas-status-passive" class="atlas-os-status-pill atlas-os-status-pill--toggle" data-on="true">Passive Wake: ON</button>
+      <button type="button" id="atlas-status-conversation" class="atlas-os-status-pill atlas-os-status-pill--toggle" data-on="false">Conversation: OFF</button>
+      <button type="button" id="atlas-status-speak" class="atlas-os-status-pill atlas-os-status-pill--toggle" data-on="false">Speak: OFF</button>
+      <span id="atlas-status-bridge" class="atlas-os-status-meta">Desktop: —</span>
+      <span id="atlas-status-listening" class="atlas-os-status-meta">Listening: …</span>
+      <span id="atlas-status-last" class="atlas-os-status-meta">Last: —</span>
+    </div>
+    <div class="atlas-os-status-ticker-wrap">
       <div class="atlas-ticker" id="atlas-briefing-ticker">
         <div class="atlas-ticker-track" id="atlas-briefing-ticker-track">
           <p class="atlas-ticker-text atlas-home-briefing-text" id="atlas-home-briefing-text">Loading briefing…</p>
           <p class="atlas-ticker-text atlas-ticker-clone" id="atlas-briefing-ticker-clone" aria-hidden="true"></p>
         </div>
       </div>
-    </header>
+    </div>
+  </header>
 
+  <section id="atlas-home" class="atlas-home atlas-mc" aria-label="Atlas OS Mission Control">
     <div class="atlas-mc-body">
-      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Recent projects">
+      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Mission status">
+        <section class="atlas-home-briefing-card atlas-mc-section atlas-mc-section--briefing" id="atlas-home-briefing-card" aria-labelledby="atlas-home-briefing-card-title">
+          <h2 class="atlas-mc-section-title" id="atlas-home-briefing-card-title">Daily Briefing</h2>
+          <p class="atlas-briefing-headline" id="atlas-briefing-headline">Loading…</p>
+          <ul class="atlas-briefing-priorities" id="atlas-briefing-priorities"></ul>
+          <p class="atlas-briefing-recommendation" id="atlas-briefing-recommendation"></p>
+          <div class="atlas-briefing-actions">
+            <button type="button" id="atlas-briefing-speak" class="atlas-briefing-btn">Speak Briefing</button>
+            <button type="button" id="atlas-briefing-refresh" class="atlas-briefing-btn atlas-briefing-btn--ghost">Refresh</button>
+            <button type="button" id="atlas-briefing-details" class="atlas-briefing-btn atlas-briefing-btn--ghost">Open Details</button>
+          </div>
+          <div class="atlas-desktop-control" id="atlas-desktop-control">
+            <p class="atlas-desktop-control-status" id="atlas-desktop-control-status">Desktop Control: Disabled</p>
+            <p class="atlas-desktop-control-meta" id="atlas-desktop-control-meta"></p>
+            <div class="atlas-desktop-control-actions">
+              <button type="button" id="atlas-desktop-open-cursor" class="atlas-briefing-btn" disabled>Open Cursor</button>
+              <button type="button" id="atlas-desktop-open-folder" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Open Project Folder</button>
+              <button type="button" id="atlas-desktop-view-apps" class="atlas-briefing-btn atlas-briefing-btn--ghost">View Apps</button>
+              <button type="button" id="atlas-desktop-test-cursor" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Test Open Cursor</button>
+              <button type="button" id="atlas-desktop-test-browser" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Test Open Browser</button>
+              <button type="button" id="atlas-desktop-setup" class="atlas-briefing-btn atlas-briefing-btn--ghost">Setup Instructions</button>
+            </div>
+          </div>
+        </section>
         <section class="atlas-mc-section atlas-mc-section--recent">
           <h2 class="atlas-mc-section-title" id="atlas-home-projects-heading">Recent Projects</h2>
           <div id="atlas-home-projects" class="atlas-home-projects atlas-home-recent-list"></div>
@@ -977,39 +1020,11 @@
           <h1 class="atlas-mc-title">ATLAS OS</h1>
 
           <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
-            <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" />
+            <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" autocomplete="off" />
             <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
             </button>
           </form>
-
-          <div id="atlas-home-voice-panel" class="atlas-home-voice-panel" aria-label="Voice controls">
-            <div class="atlas-home-voice-top">
-              <span id="atlas-home-voice-status" class="atlas-home-voice-status" data-status="idle">Standby</span>
-              <span id="atlas-home-voice-mic-dot" class="atlas-home-voice-mic-dot" aria-hidden="true" title="Microphone inactive"></span>
-            </div>
-            <div class="atlas-home-voice-toggles">
-              <label class="atlas-home-voice-toggle"><input type="checkbox" id="atlas-home-conv-mode" checked /> Conversation</label>
-              <label class="atlas-home-voice-toggle"><input type="checkbox" id="atlas-home-speak-replies" checked /> Speak replies</label>
-            </div>
-            <div class="atlas-home-voice-actions">
-              <button type="button" id="atlas-home-voice-restart" class="atlas-home-voice-btn">Restart</button>
-              <button type="button" id="atlas-home-voice-pause" class="atlas-home-voice-btn atlas-home-voice-btn--ghost">Pause</button>
-              <label class="atlas-home-voice-stt-label">STT
-                <select id="atlas-home-stt-mode" class="atlas-home-voice-select" aria-label="Speech-to-text mode">
-                  <option value="browser">Browser Live</option>
-                  <option value="whisper">Local Whisper</option>
-                </select>
-              </label>
-              <button type="button" id="atlas-home-voice-advanced" class="atlas-home-voice-btn atlas-home-voice-btn--ghost">Advanced</button>
-            </div>
-            <details class="atlas-home-voice-voice-row">
-              <summary>Voice settings</summary>
-              <label class="atlas-home-voice-voice-label">Voice
-                <select id="atlas-home-tts-voice" class="atlas-home-voice-select" aria-label="Text-to-speech voice"></select>
-              </label>
-            </details>
-          </div>
 
           <section id="atlas-home-conversation" class="atlas-home-conversation" aria-label="Conversation">
             <div id="atlas-conv-log" class="atlas-conv-log" role="log" aria-live="polite"></div>
@@ -1023,51 +1038,122 @@
 
       <aside class="atlas-mc-panel atlas-mc-panel-right" aria-labelledby="atlas-home-agents-heading">
         <h2 class="atlas-mc-section-title" id="atlas-home-agents-heading">Agent Network</h2>
-        <div id="atlas-home-agents" class="atlas-home-agents"></div>
+        <div id="atlas-home-agents" class="atlas-home-agents atlas-home-agents--compact"></div>
+        <details class="atlas-home-voice-ref" open>
+          <summary class="atlas-home-voice-ref-title">Quick Command Reference</summary>
+          <div class="atlas-home-voice-ref-body">
+            <p class="atlas-home-voice-ref-section">VOICE</p>
+            <p>Wake: Hey Atlas / Wake up Atlas / Good morning Atlas</p>
+            <p>Sleep: Atlas standby / Atlas take a break</p>
+            <p class="atlas-home-voice-ref-section">NAVIGATION</p>
+            <p>Prefixes: Move to / Navigate to / Switch to / Go to / Open</p>
+            <p>Targets: Home / Projects / Agents / Finance / Calendar / Settings / Assistant</p>
+            <p class="atlas-home-voice-ref-section">APPLICATIONS</p>
+            <p>Open: Open / Launch / Start / Activate</p>
+            <p>Close: Close / Exit / Quit / Terminate / Stop</p>
+            <p>Examples: Cursor / Browser / Spotify / Discord / OBS / Steam / League</p>
+            <p class="atlas-home-voice-ref-section">BROWSER</p>
+            <p>Open browser on: Google / YouTube / ChatGPT / Supabase / Base44 / GitHub / Reddit</p>
+            <p>Search: Find video about [topic] / Watch video about [topic]</p>
+            <p class="atlas-home-voice-ref-section">PROJECTS</p>
+            <p>Review: Review [project]</p>
+            <p>Open: Open [project] in Cursor / Open [project] folder</p>
+            <p>Council: Run Council Review / Generate Cursor Prompt / Generate Launch Plan / Deep Index Project</p>
+            <p class="atlas-home-voice-ref-section">ATLAS</p>
+            <p>Stop speaking / Repeat / Summarise / Continue / Refresh Workspace</p>
+            <p class="atlas-home-voice-ref-section">CONTEXT ACTIONS</p>
+            <div id="atlas-voice-actions-panel" class="atlas-voice-actions-panel" aria-live="polite"></div>
+          </div>
+        </details>
       </aside>
     </div>
   </section>
 
-  <section id="atlas-agents-office" class="atlas-agents-office hidden" aria-label="Agents Office">
-    <header class="atlas-agents-header">
-      <h1 class="atlas-agents-title">Agents Office</h1>
-      <p class="atlas-agents-subtitle">Atlas Core operations floor</p>
+  <section id="atlas-agents-office" class="atlas-agents-office atlas-hq hidden" aria-label="Agents Office">
+    <header class="atlas-agents-header atlas-hq-header">
+      <div class="atlas-hq-header-text">
+        <h1 class="atlas-agents-title">Agents Office</h1>
+        <p class="atlas-agents-subtitle">Atlas Headquarters — executive council operations</p>
+      </div>
+      <div id="atlas-hq-briefing-strip" class="atlas-hq-briefing-strip" aria-live="polite"></div>
     </header>
-    <div class="atlas-agents-layout">
-      <main class="atlas-agents-main" aria-label="Agent Network">
-        <h2 class="atlas-agents-network-label">Agent Network</h2>
-        <div id="atlas-agents-network" class="atlas-agents-network">
+    <div class="atlas-agents-layout atlas-hq-layout">
+      <main class="atlas-agents-main atlas-hq-main" aria-label="The Atlas Council">
+        <h2 class="atlas-agents-network-label">The Atlas Council</h2>
+        <div id="atlas-agents-network" class="atlas-agents-network atlas-hq-network">
           <canvas id="atlas-agents-lines" class="atlas-agents-lines" aria-hidden="true"></canvas>
-          <div id="atlas-agents-core-hub" class="atlas-agents-core-hub" aria-hidden="true">
+          <button type="button" id="atlas-council-hub" class="atlas-agents-core-hub atlas-council-hub" aria-label="Open The Atlas Council overview">
             <span class="atlas-agents-core-ring"></span>
-            <span class="atlas-agents-core-label">Atlas Core</span>
-          </div>
+            <span class="atlas-agents-core-label">The Atlas<br>Council</span>
+          </button>
           <div id="atlas-agents-pods" class="atlas-agents-pods"></div>
         </div>
       </main>
-      <aside class="atlas-agents-reports" aria-label="Reports Queue">
-        <h2 class="atlas-agents-reports-title">Reports Queue</h2>
-        <section class="atlas-agents-reports-section">
-          <h3 class="atlas-agents-reports-heading">Pending Reports</h3>
-          <ul id="atlas-reports-pending" class="atlas-agents-reports-list"></ul>
-        </section>
-        <section class="atlas-agents-reports-section">
-          <h3 class="atlas-agents-reports-heading">Waiting for Approval</h3>
-          <ul id="atlas-reports-approval" class="atlas-agents-reports-list"></ul>
-        </section>
-        <section class="atlas-agents-reports-section">
-          <h3 class="atlas-agents-reports-heading">Completed Today</h3>
-          <ul id="atlas-reports-completed" class="atlas-agents-reports-list"></ul>
-        </section>
+      <aside class="atlas-hq-sidebar" aria-label="Council status">
+        <h2 class="atlas-hq-sidebar-title">Council Status</h2>
+        <div id="atlas-hq-status-cards" class="atlas-hq-status-cards"></div>
+        <button type="button" id="atlas-hq-open-council" class="atlas-hq-sidebar-btn">Open Council Overview</button>
+        <p class="atlas-hq-sidebar-hint">Click any department office for agent reports. Reports live in agent offices — not duplicated here.</p>
       </aside>
     </div>
-    <section id="atlas-pipeline-section" class="atlas-pipeline-section" aria-label="Agent Workflow Pipeline">
-      <h2 class="atlas-pipeline-title">Workflow Pipeline</h2>
-      <div id="atlas-pipeline-flow" class="atlas-pipeline-flow"></div>
-      <div id="atlas-pipeline-items" class="atlas-pipeline-items"></div>
+    <section id="atlas-pipeline-section" class="atlas-pipeline-section atlas-pipeline-v2" aria-label="Council Pipeline">
+      <h2 class="atlas-pipeline-title">Council Pipeline</h2>
+      <div id="atlas-pipeline-items" class="atlas-pipeline-items atlas-pipeline-items-v2"></div>
     </section>
-    <footer id="atlas-agents-controls" class="atlas-agents-controls" aria-label="Agent Controls"></footer>
+    <footer id="atlas-agents-controls" class="atlas-agents-controls atlas-hq-controls" aria-label="Agent Controls"></footer>
   </section>
+
+  <div id="atlas-agent-office-modal" class="atlas-hq-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-agent-office-title" aria-hidden="true">
+    <div class="atlas-hq-modal-backdrop" data-atlas-agent-office-close></div>
+    <div class="atlas-hq-modal-panel atlas-hq-modal-panel--agent">
+      <header class="atlas-hq-modal-header">
+        <div>
+          <p class="atlas-hq-modal-kicker" id="atlas-agent-office-dept"></p>
+          <h2 class="atlas-hq-modal-title" id="atlas-agent-office-title">Agent Office</h2>
+          <p class="atlas-hq-modal-sub" id="atlas-agent-office-role"></p>
+        </div>
+        <button type="button" class="atlas-hq-modal-close" data-atlas-agent-office-close aria-label="Close">&times;</button>
+      </header>
+      <div class="atlas-agent-office-layout">
+        <aside class="atlas-agent-inbox" id="atlas-agent-office-inbox" aria-label="Agent inbox"></aside>
+        <main class="atlas-agent-office-main">
+          <section class="atlas-agent-conversation" id="atlas-agent-office-conversation" aria-label="Message agent">
+            <h3 class="atlas-agent-section-title">Conversation</h3>
+            <textarea id="atlas-agent-message-input" class="atlas-agent-message-input" rows="3" placeholder="Message this agent…"></textarea>
+            <div class="atlas-agent-message-controls">
+              <label class="atlas-agent-message-field">
+                <span>Project</span>
+                <select id="atlas-agent-message-project" class="atlas-agent-message-select">
+                  <option value="">General (no project)</option>
+                </select>
+              </label>
+              <label class="atlas-agent-message-field">
+                <span>Report type</span>
+                <select id="atlas-agent-message-type" class="atlas-agent-message-select"></select>
+              </label>
+              <button type="button" id="atlas-agent-message-send" class="atlas-agent-message-send">Send</button>
+            </div>
+          </section>
+          <div class="atlas-agent-office-reports-wrap" id="atlas-agent-office-reports"></div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-council-modal" class="atlas-hq-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-council-modal-title" aria-hidden="true">
+    <div class="atlas-hq-modal-backdrop" data-atlas-council-close></div>
+    <div class="atlas-hq-modal-panel atlas-hq-modal-panel--council">
+      <header class="atlas-hq-modal-header">
+        <div>
+          <p class="atlas-hq-modal-kicker">Atlas Headquarters</p>
+          <h2 class="atlas-hq-modal-title" id="atlas-council-modal-title">The Atlas Council</h2>
+          <p class="atlas-hq-modal-sub" id="atlas-council-modal-sub"></p>
+        </div>
+        <button type="button" class="atlas-hq-modal-close" data-atlas-council-close aria-label="Close">&times;</button>
+      </header>
+      <div class="atlas-hq-modal-body atlas-council-modal-body" id="atlas-council-modal-body"></div>
+    </div>
+  </div>
 
   <section id="atlas-projects-panel" class="atlas-os-panel hidden" aria-label="Projects">
     <header class="atlas-os-panel-header">
@@ -1106,6 +1192,8 @@
         <button type="button" id="atlas-workspace-bootstrap" class="atlas-project-btn">Create Workspace Folders</button>
         <button type="button" id="atlas-workspace-scan" class="atlas-project-btn atlas-project-btn--primary">Scan Projects</button>
         <button type="button" id="atlas-workspace-index-all" class="atlas-project-btn">Index All</button>
+        <button type="button" id="atlas-workspace-deep-index-all" class="atlas-project-btn">Deep Index All</button>
+        <button type="button" id="atlas-run-reasoning-audit" class="atlas-project-btn">Run Reasoning Audit</button>
         <button type="button" id="atlas-workspace-setup" class="atlas-project-btn">Open Setup Instructions</button>
         <button type="button" id="atlas-workspace-browse" class="atlas-project-btn" title="Browse /workspace in container">Browse</button>
         <button type="button" id="atlas-workspace-save" class="atlas-project-btn hidden">Save Settings</button>
@@ -1151,6 +1239,20 @@
       </div>
     </form>
   </section>
+
+  <div id="atlas-reasoning-audit-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-reasoning-audit-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-audit-close></div>
+    <div class="atlas-report-modal-panel atlas-audit-panel">
+      <header class="atlas-report-modal-header">
+        <h2 class="atlas-report-modal-title" id="atlas-reasoning-audit-title">Atlas Reasoning Audit</h2>
+        <p class="atlas-audit-meta" id="atlas-reasoning-audit-meta"></p>
+        <button type="button" class="atlas-report-modal-close" data-audit-close aria-label="Close">&times;</button>
+      </header>
+      <div class="atlas-report-modal-body atlas-reasoning-audit-body" id="atlas-reasoning-audit-body">
+        <p class="atlas-audit-empty">Run the audit to inspect workspace, project, and agent context health.</p>
+      </div>
+    </div>
+  </div>
 
   <div id="atlas-workspace-setup-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-workspace-setup-title" aria-hidden="true">
     <div class="atlas-report-modal-backdrop" data-atlas-setup-close></div>
@@ -1204,6 +1306,111 @@
         <button type="button" class="atlas-project-btn" data-pctx-marketing>Marketing Ideas</button>
         <button type="button" class="atlas-project-btn" data-pctx-summary>Open Summary</button>
         <button type="button" class="atlas-project-btn" id="atlas-pctx-pin" data-pctx-pin>Pin</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-project-hq" class="atlas-project-hq hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-hq-title" aria-hidden="true">
+    <div class="atlas-project-hq-backdrop" data-hq-close></div>
+    <div class="atlas-project-hq-shell">
+      <header class="atlas-project-hq-header">
+        <div class="atlas-project-hq-header-main">
+          <p class="atlas-project-hq-kicker">Project Command Centre</p>
+          <h2 id="atlas-hq-title" class="atlas-project-hq-title">Project</h2>
+          <p id="atlas-hq-subtitle" class="atlas-project-hq-subtitle"></p>
+          <div id="atlas-hq-meta" class="atlas-project-hq-meta"></div>
+          <p id="atlas-hq-stale" class="atlas-project-hq-stale hidden">Index may be stale. Run Deep Index.</p>
+        </div>
+        <div class="atlas-project-hq-header-actions">
+          <button type="button" class="atlas-project-btn" id="atlas-hq-pin" data-hq-pin>Pin</button>
+          <button type="button" class="atlas-project-btn" id="atlas-hq-make-active" data-hq-make-active>Make Active Project</button>
+          <button type="button" class="atlas-project-hq-close" data-hq-close aria-label="Close">&times;</button>
+        </div>
+      </header>
+      <div id="atlas-hq-loading" class="atlas-project-hq-loading">Loading Project HQ…</div>
+      <div id="atlas-hq-content" class="atlas-project-hq-content hidden">
+        <div class="atlas-project-hq-grid">
+          <section class="atlas-hq-card atlas-hq-card--wide">
+            <h3>Project Score</h3>
+            <div id="atlas-hq-scores" class="atlas-hq-scores"></div>
+          </section>
+          <section class="atlas-hq-card">
+            <h3>Current Stage</h3>
+            <div id="atlas-hq-stage"></div>
+          </section>
+          <section class="atlas-hq-card">
+            <h3>Recent Changes</h3>
+            <div id="atlas-hq-changes"></div>
+          </section>
+          <section class="atlas-hq-card atlas-hq-card--wide">
+            <h3>Council Pipeline</h3>
+            <div id="atlas-hq-pipeline"></div>
+          </section>
+          <section class="atlas-hq-card atlas-hq-card--wide">
+            <h3>Latest Reports</h3>
+            <div id="atlas-hq-reports"></div>
+          </section>
+          <section class="atlas-hq-card atlas-hq-card--action">
+            <h3>Recommended Next Action</h3>
+            <p id="atlas-hq-recommendation" class="atlas-hq-recommendation"></p>
+            <div class="atlas-hq-action-row">
+              <button type="button" class="atlas-project-btn atlas-project-btn--primary" data-hq-cursor-prompt>Generate Cursor Prompt</button>
+              <button type="button" class="atlas-project-btn" data-hq-council>Run Council Review</button>
+              <button type="button" class="atlas-project-btn" data-hq-launch-plan>Launch Strategy</button>
+            </div>
+          </section>
+          <section class="atlas-hq-card atlas-hq-card--action">
+            <h3>Quick Actions</h3>
+            <div class="atlas-hq-action-row">
+              <button type="button" class="atlas-project-btn" data-hq-desktop="cursor" data-hq-desktop>Open in Cursor</button>
+              <button type="button" class="atlas-project-btn" data-hq-desktop="folder" data-hq-desktop>Open Project Folder</button>
+              <button type="button" class="atlas-project-btn" data-hq-deep-index>Run Deep Index</button>
+              <button type="button" class="atlas-project-btn" data-hq-ask-project>Ask Atlas About Project</button>
+            </div>
+          </section>
+          <section class="atlas-hq-card">
+            <h3>Desktop Setup</h3>
+            <p id="atlas-hq-desktop-status" class="atlas-hq-desktop-status">Desktop bridge disabled</p>
+            <p id="atlas-hq-desktop-meta" class="atlas-hq-desktop-meta"></p>
+            <ol class="atlas-hq-desktop-steps">
+              <li>Edit desktop_bridge/apps.json for app paths</li>
+              <li>Configure token in desktop_permissions.json</li>
+              <li>Start desktop_bridge.py on Windows</li>
+              <li>Enable desktop_commands_enabled</li>
+            </ol>
+            <div class="atlas-hq-action-row">
+              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-view-apps">View Apps</button>
+              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-test-cursor">Test Open Cursor</button>
+              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-test-browser">Test Open Browser</button>
+              <button type="button" class="atlas-project-btn" data-hq-desktop-setup>Setup Instructions</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="atlas-desktop-apps-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-desktop-apps-title" aria-hidden="true">
+    <div class="atlas-report-modal-backdrop" data-desktop-apps-close></div>
+    <div class="atlas-report-modal-panel atlas-desktop-apps-panel">
+      <header class="atlas-report-modal-header">
+        <h2 id="atlas-desktop-apps-title">Desktop Bridge Apps</h2>
+        <button type="button" class="atlas-report-modal-close" data-desktop-apps-close aria-label="Close">&times;</button>
+      </header>
+      <p id="atlas-desktop-apps-summary" class="atlas-desktop-apps-summary">Loading…</p>
+      <div class="atlas-desktop-apps-table-wrap">
+        <table class="atlas-desktop-apps-table">
+          <thead>
+            <tr>
+              <th>App</th>
+              <th>Status</th>
+              <th>Path / URI</th>
+              <th>Aliases</th>
+              <th>Missing reason</th>
+            </tr>
+          </thead>
+          <tbody id="atlas-desktop-apps-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -1294,8 +1501,8 @@
         <button type="button" class="atlas-voice-close" data-atlas-voice-close aria-label="Close">&times;</button>
       </header>
       <p id="atlas-voice-unsupported" class="atlas-voice-unsupported hidden">Speech recognition is not supported in this browser. Switch to Local Whisper or type commands below.</p>
-      <p id="atlas-voice-conversation-note" class="atlas-voice-wake-note">Conversation Mode: enable wake phrase for hands-free flow. Atlas stops listening while speaking.</p>
-      <p id="atlas-voice-privacy-browser" class="atlas-voice-privacy">Microphone is off until you start listening or enable Conversation Mode (wake phrase). No background listening without your action.</p>
+      <p id="atlas-voice-conversation-note" class="atlas-voice-wake-note">Passive wake listens for activation phrases (e.g. Hey Atlas). Conversation Mode handles follow-up commands. Clap detection is disabled.</p>
+      <p id="atlas-voice-privacy-browser" class="atlas-voice-privacy">On Home, passive wake listening is on by default. Say Hey Atlas to activate — no clap detection, no audio storage.</p>
       <p id="atlas-voice-privacy-whisper" class="atlas-voice-privacy atlas-voice-privacy--whisper hidden">Local Whisper mode sends audio only to your local Atlas server. Audio is deleted after transcription.</p>
       <p id="atlas-voice-whisper-setup" class="atlas-voice-setup-note hidden">Install faster-whisper from Cookbook/Dependencies or rebuild Docker with <code>INSTALL_OPTIONAL=true</code>.</p>
       <p id="atlas-voice-wake-whisper-note" class="atlas-voice-wake-note hidden">Wake phrase with local Whisper streaming coming later. Use Browser STT for wake phrase, or record-stop in Local Whisper.</p>
@@ -1367,7 +1574,7 @@
     </div>
   </div>
 
-  <div id="atlas-report-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-report-modal-title" aria-hidden="true">
+  <div id="atlas-report-modal" class="atlas-report-modal atlas-report-modal-v2 hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-report-modal-title" aria-hidden="true">
     <div class="atlas-report-modal-backdrop" data-atlas-report-close></div>
     <div class="atlas-report-modal-panel">
       <header class="atlas-report-modal-header">
@@ -1375,9 +1582,11 @@
           <p class="atlas-report-modal-agent" id="atlas-report-modal-agent"></p>
           <h2 class="atlas-report-modal-title" id="atlas-report-modal-title"></h2>
           <p class="atlas-report-modal-meta" id="atlas-report-modal-meta"></p>
+          <div class="atlas-report-modal-badges" id="atlas-report-modal-badges"></div>
         </div>
         <button type="button" class="atlas-report-modal-close" data-atlas-report-close aria-label="Close report">&times;</button>
       </header>
+      <div class="atlas-report-modal-context" id="atlas-report-modal-context"></div>
       <p class="atlas-report-modal-summary" id="atlas-report-modal-summary"></p>
       <div class="atlas-report-modal-body" id="atlas-report-modal-body"></div>
       <footer class="atlas-report-modal-actions" id="atlas-report-modal-actions"></footer>
@@ -1392,6 +1601,7 @@
     <h1 class="a11y-visually-hidden">Atlas</h1>
     <div class="atlas-assistant-layout">
     <aside id="atlas-assistant-sessions-panel" class="atlas-assistant-sessions-panel" aria-label="Conversations">
+      <p class="atlas-assistant-sessions-heading">Conversations</p>
       <button type="button" id="atlas-assistant-new-chat" class="atlas-assistant-new-chat">+ New Chat</button>
       <div id="atlas-assistant-session-list" class="atlas-assistant-session-list"></div>
     </aside>
@@ -2850,5 +3060,6 @@
 <script type="module" src="/static/js/init.js"></script>
 <script type="module" src="/static/js/a11y.js"></script>
 <script nonce="{{CSP_NONCE}}">if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js').catch(()=>{});}</script>
+
 </body>
 </html>

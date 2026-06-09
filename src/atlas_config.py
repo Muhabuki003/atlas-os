@@ -16,6 +16,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULTS_DIR = _REPO_ROOT / "config" / "atlas"
 _DATA_DIR = _REPO_ROOT / "data" / "atlas"
 
+_CORRUPT_CONFIG_MARKERS = (
+    "exploring the codebase",
+    "built atlas reasoning audit",
+    "reasoning audit v1",
+    "cursor summary prose",
+)
+
 _CONFIG_FILES = (
     "atlas_identity.json",
     "aurelius_profile.json",
@@ -27,6 +34,8 @@ _CONFIG_FILES = (
     "workspace.json",
     "personal_finance.json",
     "desktop_permissions.json",
+    "briefing_settings.json",
+    "council.json",
 )
 
 
@@ -45,21 +54,158 @@ def _ensure_data_dir() -> None:
             logger.warning("[atlas] missing default config %s", src)
 
 
+def _is_corrupted_config_text(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped:
+        return False
+    low = stripped.lower()
+    if any(marker in low for marker in _CORRUPT_CONFIG_MARKERS):
+        return True
+    try:
+        json.loads(stripped)
+        return False
+    except json.JSONDecodeError:
+        return True
+
+
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        return data if isinstance(data, dict) else {}
+
+
 def _read_json(filename: str) -> Dict[str, Any]:
     _ensure_data_dir()
     path = _DATA_DIR / filename
+    fallback = _DEFAULTS_DIR / filename
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError) as exc:
-        logger.warning("[atlas] could not read %s: %s", path, exc)
-        fallback = _DEFAULTS_DIR / filename
+        if path.exists():
+            raw = path.read_text(encoding="utf-8")
+            if _is_corrupted_config_text(raw):
+                logger.warning("[atlas] corrupted runtime config %s — restoring from defaults", path)
+                if fallback.exists():
+                    return _load_json_file(fallback)
+                return {}
+            return _load_json_file(path)
         if fallback.exists():
-            with open(fallback, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data if isinstance(data, dict) else {}
+            return _load_json_file(fallback)
         return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("[atlas] could not read %s: %s", path, exc)
+        if fallback.exists():
+            return _load_json_file(fallback)
+        return {}
+
+
+def normalize_aurelius_profile(profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Merge legacy profile fields with V2 dynamic-focus profile shape."""
+    raw = dict(profile or load_aurelius_profile())
+    out = dict(raw)
+    if not out.get("address_as"):
+        out["address_as"] = out.get("preferred_name") or "Sir"
+    if not out.get("preferred_name"):
+        out["preferred_name"] = out.get("address_as") or "Sir"
+    if isinstance(out.get("business_preferences"), list):
+        out["business_preferences_text"] = ", ".join(out["business_preferences"])
+    elif isinstance(out.get("business_preferences"), str):
+        out["business_preferences_text"] = out["business_preferences"]
+    else:
+        out["business_preferences_text"] = ""
+    comm = out.get("communication_style") or {}
+    if isinstance(comm, dict):
+        if not out.get("work_style") and comm.get("tone"):
+            out["work_style"] = comm["tone"]
+        if not out.get("assistant_style") and comm.get("voice_mode"):
+            out["assistant_style"] = comm["voice_mode"]
+    out.setdefault(
+        "focus_selection_rule",
+        "Choose focus dynamically from pinned projects, recent activity, scores, and active project context.",
+    )
+    return out
+
+
+def profile_address(profile: Optional[Dict[str, Any]] = None) -> str:
+    p = normalize_aurelius_profile(profile)
+    return (p.get("preferred_name") or p.get("address_as") or "Sir").strip() or "Sir"
+
+
+def resolve_dynamic_focus() -> Dict[str, Any]:
+    """Select focus project(s) from live Atlas data — never hardcoded seed names."""
+    from src.atlas_command_centre import load_active_project
+    from src.atlas_project_index import load_all_summaries
+    from src.atlas_projects import sort_recent_projects
+
+    ddir = data_dir()
+    projects = [p for p in load_projects() if (p.get("status") or "").lower() != "archived"]
+    summaries = {s.get("project_id"): s for s in load_all_summaries(ddir)}
+    reports = load_reports()
+    pipeline = load_pipeline()
+
+    def _score(p: Dict[str, Any]) -> int:
+        s = summaries.get(p.get("id"))
+        score = int(p.get("activity_score") or 0)
+        if s and s.get("potential_score"):
+            score = max(score, int(s.get("potential_score") or 0))
+        if p.get("pinned"):
+            score += 1000
+        if (p.get("priority") or "").lower() == "high":
+            score += 50
+        ch = p.get("recent_changes") or {}
+        score += min(30, (ch.get("new_count") or 0) + (ch.get("modified_count") or 0))
+        return score
+
+    def _pack(items: List[Dict[str, Any]], reason: str, detail: str = "") -> Dict[str, Any]:
+        names = [p.get("name") for p in items if p.get("name")]
+        return {
+            "projects": items,
+            "names": names,
+            "label": " and ".join(names[:3]) if names else "",
+            "reason": reason,
+            "detail": detail,
+        }
+
+    active_file = load_active_project()
+    if active_file and active_file.get("project_id"):
+        p = next((x for x in projects if x.get("id") == active_file["project_id"]), None)
+        if p:
+            return _pack([p], "active_project", "Set via active_project.json")
+
+    pinned = [p for p in projects if p.get("pinned")]
+    if pinned:
+        ordered = sorted(pinned, key=_score, reverse=True)
+        return _pack(ordered[:3], "pinned", "Pinned projects")
+
+    pending_reports = [
+        r for r in reports if (r.get("status") or "") in ("waiting_for_review", "awaiting_approval")
+    ]
+    for r in pending_reports:
+        pid = r.get("project_id")
+        if pid:
+            p = next((x for x in projects if x.get("id") == pid), None)
+            if p:
+                return _pack([p], "pending_council", r.get("title") or "Pending report")
+
+    waiting_pipeline = [
+        i for i in pipeline
+        if (i.get("status") or "") in ("waiting", "pending_approval", "awaiting_approval")
+        and i.get("project_id")
+    ]
+    if waiting_pipeline:
+        pid = waiting_pipeline[0].get("project_id")
+        p = next((x for x in projects if x.get("id") == pid), None)
+        if p:
+            return _pack([p], "pipeline", waiting_pipeline[0].get("title") or "Pipeline item")
+
+    ranked = sort_recent_projects(projects)
+    if ranked:
+        top = ranked[0]
+        return _pack([top], "recent_activity", f"Top activity score {_score(top)}")
+
+    active = active_focus_projects()
+    if active:
+        return _pack(active[:3], "active_status", "Projects marked active in projects.json")
+
+    return _pack([], "none", "No project focus resolved — ask user or scan workspace")
 
 
 def load_atlas_identity() -> Dict[str, Any]:
@@ -67,7 +213,7 @@ def load_atlas_identity() -> Dict[str, Any]:
 
 
 def load_aurelius_profile() -> Dict[str, Any]:
-    return _read_json("aurelius_profile.json")
+    return normalize_aurelius_profile(_read_json("aurelius_profile.json"))
 
 
 def data_dir() -> Path:
@@ -183,8 +329,8 @@ def load_profile_bundle() -> Dict[str, Any]:
 
 
 def time_aware_greeting(profile: Optional[Dict[str, Any]] = None) -> str:
-    profile = profile or load_aurelius_profile()
-    address = (profile.get("address_as") or "Sir").strip()
+    profile = normalize_aurelius_profile(profile or load_aurelius_profile())
+    address = profile_address(profile)
     hour = datetime.now().hour
     if hour < 12:
         part = "morning"
@@ -205,7 +351,8 @@ def generate_briefing() -> Dict[str, Any]:
     from src.atlas_project_index import load_all_summaries, load_summary
 
     profile = load_aurelius_profile()
-    projects = active_focus_projects()
+    focus = resolve_dynamic_focus()
+    projects = focus.get("projects") or active_focus_projects()
     all_projects = load_projects()
     agents = load_agents()
     ddir = data_dir()
@@ -213,8 +360,8 @@ def generate_briefing() -> Dict[str, Any]:
     summaries = {s.get("project_id"): s for s in load_all_summaries(ddir)}
 
     greeting = time_aware_greeting(profile)
-    focus_names = [p.get("name") for p in projects if p.get("name")]
-    focus_text = " and ".join(focus_names) if focus_names else (profile.get("current_focus") or "").rstrip(".")
+    focus_names = focus.get("names") or [p.get("name") for p in projects if p.get("name")]
+    focus_text = focus.get("label") or " and ".join(focus_names) if focus_names else "No project focus yet — scan workspace"
 
     ready_agents = [a for a in agents if (a.get("status") or "").lower() == "ready"]
     dev_ready = next((a for a in agents if a.get("id") == "developer" and (a.get("status") or "") in ("ready", "idle")), None)
@@ -319,11 +466,12 @@ def build_atlas_system_context() -> str:
 
     identity = load_atlas_identity()
     profile = load_aurelius_profile()
-    projects = active_focus_projects()
+    focus = resolve_dynamic_focus()
+    projects = focus.get("projects") or active_focus_projects()
     agents = load_agents()
     summaries = load_all_summaries(data_dir())
 
-    address = profile.get("address_as") or identity.get("address_user_as") or "Sir"
+    address = profile_address(profile) or identity.get("address_user_as") or "Sir"
     reply_style = identity.get("reply_style") or (
         "Default to brief replies unless the user asks for detail. "
         "Voice: 1–4 sentences. Text: concise but useful. "
@@ -342,16 +490,26 @@ def build_atlas_system_context() -> str:
         "Avoid long essays, generic AI waffle, overexplaining, and repeating context.",
         "",
         f"## User: {profile.get('name', 'Aurelius')} ({address})",
+        f"Role: {profile.get('role', '')}",
         f"Work style: {profile.get('work_style', '')}",
-        f"Current focus: {profile.get('current_focus', '')}",
-        f"Deprioritise unless asked: {profile.get('ignore_for_now', '')}",
+        f"Focus rule: {profile.get('focus_selection_rule', '')}",
+        f"Dynamic focus ({focus.get('reason', 'unknown')}): {focus.get('label') or 'none'}",
         f"Also known as: {profile.get('also_known_as', '')}",
-        f"Interests: {', '.join(profile.get('interests', [])) if isinstance(profile.get('interests'), list) else profile.get('likes', '')}",
-        f"Business preferences: {profile.get('business_preferences', '')}",
+        f"Skills: {', '.join(profile.get('skills', [])) if isinstance(profile.get('skills'), list) else ''}",
+        f"Business preferences: {profile.get('business_preferences_text', '')}",
         f"Preferences: {profile.get('likes', '')}",
         f"How to assist: {profile.get('assistant_style', '')}",
         f"Atlas role: {profile.get('atlas_role', '')}",
     ]
+
+    try:
+        from src.atlas_council import council_context_block
+        council = council_context_block()
+        if council:
+            lines.append("")
+            lines.append(council)
+    except Exception:
+        pass
 
     if projects:
         lines.append("")

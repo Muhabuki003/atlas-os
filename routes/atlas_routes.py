@@ -15,7 +15,12 @@ from src.atlas_agents import (
     normalize_action,
     reports_for_queue,
     run_agent_action,
+    run_agent_message,
+    run_council_review,
 )
+from src.atlas_briefing_v2 import generate_briefing_v2, load_briefing_settings, save_briefing_settings
+from src.atlas_council import load_council, save_council
+from src.atlas_project_index_v2 import index_all_projects_v2, index_project_v2
 from src.atlas_config import (
     data_dir,
     generate_briefing,
@@ -32,9 +37,12 @@ from src.atlas_config import (
 from src.atlas_pipeline import apply_action as pipeline_apply_action
 from src.atlas_pipeline import attach_report, create_item
 from src.atlas_project_index import index_all_projects, index_project, load_index, load_summary
-from src.atlas_desktop import desktop_status, queue_desktop_command
+from src.atlas_command_centre import build_command_centre, make_active_project
+from src.atlas_desktop import desktop_apps, desktop_status, queue_desktop_command
+from src.atlas_desktop_intent import classify_confirmation_reply, parse_desktop_intent
 from src.atlas_mount_workspace import bootstrap_workspace_folders, get_workspace_status
 from src.atlas_voice import get_whisper_config, transcribe_audio, whisper_available
+from src.atlas_reasoning_audit import run_reasoning_audit
 from src.atlas_workspace import load_workspace, relink_project, save_workspace, scan_workspace
 from src.auth_helpers import get_current_user
 from src.upload_limits import read_upload_limited
@@ -59,6 +67,12 @@ class AgentRunRequest(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=64)
     action: str = Field(..., min_length=1, max_length=128)
     project_id: Optional[str] = Field(None, max_length=64)
+
+
+class AgentMessageRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=8000)
+    project_id: Optional[str] = Field(None, max_length=64)
+    report_type: Optional[str] = Field(None, max_length=64)
 
 
 class WorkspaceSaveRequest(BaseModel):
@@ -110,6 +124,11 @@ class PipelineActionRequest(BaseModel):
 class DesktopCommandRequest(BaseModel):
     command: str = Field(..., min_length=1, max_length=128)
     args: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DesktopParseRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=512)
+    active_project_id: Optional[str] = Field(None, max_length=64)
 
 
 def _now_iso() -> str:
@@ -280,6 +299,31 @@ def setup_atlas_routes() -> APIRouter:
         """Read-only batch index for all projects with valid paths."""
         get_current_user(request)
         return index_all_projects(data_dir())
+
+    @router.post("/projects/{project_id}/index-v2")
+    async def index_atlas_project_v2(project_id: str, request: Request):
+        """Deep read-only index with safe key-file extracts and V2 summary."""
+        owner = get_current_user(request)
+        projects = load_projects()
+        project = next((p for p in projects if p.get("id") == project_id), None)
+        if not project:
+            return {"ok": False, "message": "Project not found"}
+        if not project.get("agents_allowed", True):
+            return {"ok": False, "message": "Agent indexing disabled for this project"}
+        result = await index_project_v2(data_dir(), project, owner=owner)
+        if not result.get("ok"):
+            return result
+        for i, p in enumerate(projects):
+            if p.get("id") == project_id:
+                projects[i] = result["project"]
+                break
+        save_projects(projects)
+        return result
+
+    @router.post("/projects/index-all-v2")
+    async def index_all_atlas_projects_v2(request: Request):
+        owner = get_current_user(request)
+        return await index_all_projects_v2(data_dir(), owner=owner)
 
     @router.get("/projects/{project_id}/index")
     async def get_project_index(project_id: str, request: Request):
@@ -453,6 +497,40 @@ def setup_atlas_routes() -> APIRouter:
         get_current_user(request)
         return generate_briefing()
 
+    @router.get("/briefing/v2")
+    async def get_atlas_briefing_v2(request: Request):
+        get_current_user(request)
+        return generate_briefing_v2()
+
+    @router.get("/briefing/settings")
+    async def get_briefing_settings(request: Request):
+        get_current_user(request)
+        return {"ok": True, "settings": load_briefing_settings()}
+
+    @router.put("/briefing/settings")
+    async def put_briefing_settings(request: Request):
+        get_current_user(request)
+        body = await request.json()
+        patch = body if isinstance(body, dict) else {}
+        settings = save_briefing_settings(patch)
+        return {"ok": True, "settings": settings}
+
+    @router.get("/council")
+    async def get_council(request: Request):
+        get_current_user(request)
+        return {"ok": True, "council": load_council()}
+
+    @router.post("/council/review/{project_id}")
+    async def post_council_review(project_id: str, request: Request):
+        owner = get_current_user(request)
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        stage = body.get("stage") if isinstance(body, dict) else None
+        return await run_council_review(project_id, owner=owner, stage=stage)
+
     @router.post("/agents/run")
     async def run_atlas_agent(request: Request, body: AgentRunRequest):
         """Generate an agent report — LLM when available, safe fallback otherwise."""
@@ -463,6 +541,19 @@ def setup_atlas_routes() -> APIRouter:
             action,
             owner=owner,
             project_id=body.project_id,
+        )
+        return result
+
+    @router.post("/agents/{agent_id}/message")
+    async def post_agent_message(agent_id: str, request: Request, body: AgentMessageRequest):
+        """Custom user query to an agent — generates a structured report."""
+        owner = get_current_user(request)
+        result = await run_agent_message(
+            agent_id,
+            body.message,
+            owner=owner,
+            project_id=body.project_id,
+            report_type=body.report_type,
         )
         return result
 
@@ -570,15 +661,90 @@ def setup_atlas_routes() -> APIRouter:
             return JSONResponse(status_code=status, content=result)
         return result
 
+    @router.get("/projects/{project_id}/command-centre")
+    async def get_project_command_centre(project_id: str, request: Request):
+        get_current_user(request)
+        return build_command_centre(project_id)
+
+    @router.post("/projects/{project_id}/deep-index")
+    async def post_project_deep_index(project_id: str, request: Request):
+        owner = get_current_user(request)
+        projects = load_projects()
+        project = next((p for p in projects if p.get("id") == project_id), None)
+        if not project:
+            return {"ok": False, "message": "Project not found"}
+        result = await index_project_v2(data_dir(), project, owner=owner)
+        if result.get("ok"):
+            for i, p in enumerate(projects):
+                if p.get("id") == project_id:
+                    projects[i] = result["project"]
+                    break
+            save_projects(projects)
+        return result
+
+    @router.post("/projects/{project_id}/council-review")
+    async def post_project_council_review(project_id: str, request: Request):
+        owner = get_current_user(request)
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        stage = body.get("stage") if isinstance(body, dict) else None
+        return await run_council_review(project_id, owner=owner, stage=stage)
+
+    @router.post("/projects/{project_id}/generate-cursor-prompt")
+    async def post_generate_cursor_prompt(project_id: str, request: Request):
+        owner = get_current_user(request)
+        return await run_agent_action("developer", "cursor_prompt", owner=owner, project_id=project_id)
+
+    @router.post("/projects/{project_id}/create-launch-plan")
+    async def post_create_launch_plan(project_id: str, request: Request):
+        owner = get_current_user(request)
+        return await run_agent_action("marketing", "launch_strategy", owner=owner, project_id=project_id)
+
+    @router.post("/projects/{project_id}/make-active")
+    async def post_make_active_project(project_id: str, request: Request):
+        get_current_user(request)
+        return make_active_project(project_id)
+
     @router.get("/desktop/status")
     async def get_desktop_status(request: Request):
         get_current_user(request)
-        return desktop_status()
+        return await desktop_status()
+
+    @router.get("/desktop/apps")
+    async def get_desktop_apps(request: Request):
+        get_current_user(request)
+        return await desktop_apps()
+
+    @router.post("/desktop/parse")
+    async def post_desktop_parse(request: Request, body: DesktopParseRequest):
+        get_current_user(request)
+        result = parse_desktop_intent(
+            body.text,
+            active_project_id=body.active_project_id,
+        )
+        return {"ok": True, **result}
+
+    @router.post("/desktop/confirm-classify")
+    async def post_desktop_confirm_classify(request: Request):
+        get_current_user(request)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        text = (body.get("text") or "") if isinstance(body, dict) else ""
+        return {"ok": True, "result": classify_confirmation_reply(text)}
 
     @router.post("/desktop/command")
     async def post_desktop_command(request: Request, body: DesktopCommandRequest):
-        """Placeholder desktop control — queues only, no shell execution in V1."""
         get_current_user(request)
-        return queue_desktop_command(body.command, body.args)
+        return await queue_desktop_command(body.command, body.args)
+
+    @router.get("/audit/reasoning")
+    async def get_reasoning_audit(request: Request):
+        get_current_user(request)
+        return run_reasoning_audit()
 
     return router

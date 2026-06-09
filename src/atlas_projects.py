@@ -198,12 +198,27 @@ def build_project_context(project_id: str) -> Dict[str, Any]:
     finance = finance_for_project(project_id)
     reports = reports_for_project(project_id)
     size_bytes = folder_size_bytes(project_id)
-    potential = compute_potential_score(project, summary, finance)
+    is_v2 = bool(summary and (summary.get("index_version") == 2 or summary.get("potential_score") is not None))
+    potential = (
+        summary.get("potential_score")
+        if is_v2 and summary.get("potential_score") is not None
+        else compute_potential_score(project, summary, finance)
+    )
+    direction = PROPOSED_DIRECTION_PLACEHOLDER
+    if is_v2 and summary:
+        direction = (
+            (summary.get("recommended_next_steps") or [None])[0]
+            or summary.get("what_it_appears_to_do")
+            or direction
+        )
+    elif summary and summary.get("summary"):
+        direction = summary["summary"][:240]
 
     return {
         "ok": True,
         "project": refresh_project_activity_fields(project, summary=summary),
         "summary": summary,
+        "summary_v2": summary if is_v2 else None,
         "index_meta": {
             "file_count": (index or {}).get("file_count", project.get("file_count", 0)),
             "folder_size_bytes": size_bytes,
@@ -225,7 +240,8 @@ def build_project_context(project_id: str) -> Dict[str, Any]:
         ],
         "finance": finance,
         "potential_score": potential,
-        "proposed_direction": PROPOSED_DIRECTION_PLACEHOLDER,
+        "proposed_direction": direction,
+        "current_stage": (summary or {}).get("current_stage"),
     }
 
 

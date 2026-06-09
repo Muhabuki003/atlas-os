@@ -1,0 +1,180 @@
+{
+  "apps": [
+    {
+      "id": "cmd",
+      "display_name": "Command Prompt",
+      "aliases": ["cmd", "command prompt", "terminal", "open terminal"],
+      "type": "windows_builtin",
+      "exe": "cmd.exe",
+      "enabled": true
+    },
+    {
+      "id": "youtube",
+      "display_name": "YouTube",
+      "aliases": ["youtube", "you tube", "open youtube", "watch youtube"],
+      "type": "url",
+      "url": "https://www.youtube.com",
+      "enabled": true
+    },
+    {
+      "id": "rocketleague",
+      "display_name": "Rocket League",
+      "aliases": ["rocket league", "play rocket league", "launch rocket league", "rocketleague"],
+      "type": "uri",
+      "uri": "com.epicgames.launcher://apps/9773aa1aa54f4f7b80e44bef04986cea%3A530145df28a24424923f5828cc9031a1%3ASugar?action=launch&silent=true",
+      "enabled": true
+    },
+    {
+      "id": "leagueoflegends",
+      "display_name": "League of Legends",
+      "aliases": ["league of legends", "league", "lol", "play league", "launch league"],
+      "type": "folder_exe",
+      "path": "C:\\Riot Games\\Riot Client",
+      "exe": "RiotClientServices.exe",
+      "enabled": true
+    },
+    {
+      "id": "overwatch",
+      "display_name": "Overwatch",
+      "aliases": ["overwatch", "overwatch 2", "play overwatch", "launch overwatch"],
+      "type": "folder_exe",
+      "path": "C:\\Program Files (x86)\\Overwatch",
+      "exe": "Overwatch Launcher.exe",
+      "fallback_exes": ["Overwatch.exe", "Overwatch Launcher.exe"],
+      "enabled": true
+    },
+    {
+      "id": "fortnite",
+      "display_name": "Fortnite",
+      "aliases": ["fortnite", "play fortnite", "launch fortnite"],
+      "type": "uri",
+      "uri": "com.epicgames.launcher://apps/fn%3A4fe75bbc5a674f4f9b356b5c90567da5%3AFortnite?action=launch&silent=true",
+      "enabled": true
+    },
+    {
+      "id": "steam",
+      "display_name": "Steam",
+      "aliases": ["steam", "open steam"],
+      "type": "folder_exe",
+      "path": "C:\\Program Files (x86)\\Steam",
+      "exe": "steam.exe",
+      "enabled": true
+    },
+    {
+      "id": "discord",
+      "display_name": "Discord",
+      "aliases": ["discord", "open discord"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\Discord\\app-1.0.9240",
+      "exe": "Discord.exe",
+      "search_glob": "%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe",
+      "enabled": true
+    },
+    {
+      "id": "githubdesktop",
+      "display_name": "GitHub Desktop",
+      "aliases": ["github desktop", "open github desktop", "github app"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\GitHubDesktop",
+      "exe": "GitHubDesktop.exe",
+      "search_glob": "%LOCALAPPDATA%\\GitHubDesktop\\**\\GitHubDesktop.exe",
+      "enabled": true
+    },
+    {
+      "id": "vscode",
+      "display_name": "Visual Studio Code",
+      "aliases": ["visual studio", "visual studio code", "vs code", "vscode", "code"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\Programs\\Microsoft VS Code",
+      "exe": "Code.exe",
+      "enabled": true
+    },
+    {
+      "id": "capcut",
+      "display_name": "CapCut",
+      "aliases": ["capcut", "cap cut"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\CapCut\\Apps",
+      "exe": "CapCut.exe",
+      "search_glob": "%LOCALAPPDATA%\\CapCut\\Apps\\**\\CapCut.exe",
+      "enabled": true
+    },
+    {
+      "id": "brave",
+      "display_name": "Brave Browser",
+      "aliases": ["brave", "brave browser", "browser", "open browser"],
+      "type": "folder_exe",
+      "path": "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application",
+      "exe": "brave.exe",
+      "env_path_key": "ATLAS_BRAVE_PATH",
+      "enabled": true
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "aliases": ["cursor", "open cursor", "code with cursor"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\Programs\\cursor",
+      "exe": "Cursor.exe",
+      "env_path_key": "ATLAS_CURSOR_PATH",
+      "fallback_paths": [
+        "%LOCALAPPDATA%\\Programs\\cursor\\Cursor.exe",
+        "%LOCALAPPDATA%\\Programs\\Cursor\\Cursor.exe",
+        "C:\\Program Files\\Cursor\\Cursor.exe",
+        "C:\\Program Files (x86)\\Cursor\\Cursor.exe"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "obs",
+      "display_name": "OBS Studio",
+      "aliases": ["obs", "obs studio", "recording software"],
+      "type": "folder_exe",
+      "path": "C:\\obs-studio\\bin\\64bit",
+      "exe": "obs64.exe",
+      "enabled": true
+    },
+    {
+      "id": "whatsapp",
+      "display_name": "WhatsApp",
+      "aliases": ["whatsapp", "whats app", "messages"],
+      "type": "store_app",
+      "uri": "whatsapp:",
+      "enabled": true
+    },
+    {
+      "id": "spotify",
+      "display_name": "Spotify",
+      "aliases": ["spotify", "play spotify", "open spotify"],
+      "type": "store_app",
+      "uri": "spotify:",
+      "enabled": true
+    },
+    {
+      "id": "chrome",
+      "display_name": "Google Chrome",
+      "aliases": ["chrome", "google chrome"],
+      "type": "folder_exe",
+      "path": "%LOCALAPPDATA%\\Google\\Chrome\\Application",
+      "exe": "chrome.exe",
+      "env_path_key": "ATLAS_CHROME_PATH",
+      "enabled": true
+    },
+    {
+      "id": "explorer",
+      "display_name": "File Explorer",
+      "aliases": ["explorer", "file explorer"],
+      "type": "windows_builtin",
+      "exe": "explorer.exe",
+      "enabled": true
+    },
+    {
+      "id": "powershell",
+      "display_name": "PowerShell",
+      "aliases": ["powershell", "pwsh"],
+      "type": "windows_builtin",
+      "exe": "powershell.exe",
+      "enabled": true
+    }
+  ]
+}

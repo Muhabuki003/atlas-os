@@ -3,6 +3,8 @@
 import workspaceModule from './workspace.js';
 import atlasActiveProject from './atlasActiveProject.js';
 import atlasProjectContext from './atlasProjectContext.js';
+import AtlasVoiceContext from './atlasVoiceContext.js';
+import atlasProjectHQ from './atlasProjectHQ.js';
 
 let _projects = [];
 let _detailCtx = null;
@@ -108,6 +110,10 @@ function _pathLine(p) {
   return `<p class="atlas-project-path" title="${_esc(p.path || '')}">${_esc(display)}${container ? `<br>${container}` : ''}</p>`;
 }
 
+function _v2Meta(p) {
+  return p.summary_v2 || p.v2_summary || {};
+}
+
 function _renderCards() {
   const grid = _el('atlas-projects-grid');
   if (!grid) return;
@@ -119,6 +125,10 @@ function _renderCards() {
     const stack = (p.detected_stack || []).join(' · ') || p.type || '—';
     const changes = _changeCount(p);
     const isIndexed = !!(p.last_indexed_at || p.indexed);
+    const v2 = _v2Meta(p);
+    const isV2 = !!(v2.index_version === 2 || v2.potential_score != null || p.index_version === 2);
+    const score = v2.potential_score ?? p.potential_score;
+    const stage = v2.current_stage || p.current_stage;
     const indexLabel = isIndexed
       ? `Last indexed ${new Date(p.last_indexed_at).toLocaleString()}`
       : 'Not indexed';
@@ -130,18 +140,23 @@ function _renderCards() {
       <header class="atlas-project-card-head">
         <h3 class="atlas-project-card-name">${_esc(p.name)}</h3>
         <span class="atlas-project-index-badge${isIndexed ? ' atlas-project-index-badge--yes' : ' atlas-project-index-badge--no'}">${isIndexed ? 'Indexed' : 'Not indexed'}</span>
+        ${isV2 ? '<span class="atlas-project-v2-badge atlas-project-v2-badge--yes">V2</span>' : ''}
       </header>
       ${_pathLine(p)}
       <p class="atlas-project-card-stack"><span class="atlas-project-card-stack-label">Stack</span> ${_esc(stack)}</p>
       <div class="atlas-project-card-stats">
         <span class="atlas-project-stat"><strong>${p.file_count || 0}</strong> files</span>
         <span class="atlas-project-stat"><strong>${changes}</strong> recent changes</span>
+        ${score != null ? `<span class="atlas-project-stat atlas-project-score-pill"><strong>${score}</strong>/100</span>` : ''}
+        ${stage ? `<span class="atlas-project-stat">${_esc(stage)}</span>` : ''}
       </div>
       <p class="atlas-project-indexed">${_esc(indexLabel)}</p>
       <div class="atlas-project-card-actions">
         <button type="button" class="atlas-project-btn" data-index-project="${_esc(p.id)}"${p.path_status !== 'valid' ? ' disabled title="Relink or scan first"' : ''}>Index</button>
+        <button type="button" class="atlas-project-btn" data-deep-index-project="${_esc(p.id)}"${p.path_status !== 'valid' ? ' disabled title="Relink or scan first"' : ''}>Deep Index</button>
         <button type="button" class="atlas-project-btn" data-dev-review="${_esc(p.id)}">Developer Review</button>
-        <button type="button" class="atlas-project-btn" data-open-summary="${_esc(p.id)}">Open Summary</button>
+        <button type="button" class="atlas-project-btn" data-open-summary="${_esc(p.id)}">Summary</button>
+        <button type="button" class="atlas-project-btn atlas-project-btn--primary" data-open-hq="${_esc(p.id)}">HQ</button>
         ${relinkBtn}
       </div>
     </article>
@@ -160,14 +175,25 @@ function _detailActionsHtml(id) {
   return `
     <button type="button" class="atlas-project-btn" data-detail-ask="${_esc(id)}">Ask in Chat</button>
     <button type="button" class="atlas-project-btn" data-index-project="${_esc(id)}">Index</button>
-    <button type="button" class="atlas-project-btn" data-dev-review="${_esc(id)}">Developer Review</button>
-    <button type="button" class="atlas-project-btn" data-detail-architect="${_esc(id)}">Architect Plan</button>
-    <button type="button" class="atlas-project-btn" data-detail-business="${_esc(id)}">Business Analysis</button>
-    <button type="button" class="atlas-project-btn" data-detail-marketing="${_esc(id)}">Marketing Ideas</button>
+    <button type="button" class="atlas-project-btn" data-deep-index-project="${_esc(id)}">Deep Index</button>
+    <button type="button" class="atlas-project-btn" data-agent-v2="research" data-project-id="${_esc(id)}">Ask Research Agent</button>
+    <button type="button" class="atlas-project-btn" data-agent-v2="business" data-project-id="${_esc(id)}">Ask Business Agent</button>
+    <button type="button" class="atlas-project-btn" data-agent-v2="architect" data-project-id="${_esc(id)}">Ask Architect Agent</button>
+    <button type="button" class="atlas-project-btn" data-agent-v2="developer" data-project-id="${_esc(id)}">Ask Developer Agent</button>
+    <button type="button" class="atlas-project-btn" data-agent-v2="marketing" data-project-id="${_esc(id)}">Ask Marketing Agent</button>
+    <button type="button" class="atlas-project-btn atlas-project-council-btn" data-council-review="${_esc(id)}">Generate Full Council Review</button>
     <button type="button" class="atlas-project-btn" data-open-summary="${_esc(id)}">Open Summary</button>
     <button type="button" class="atlas-project-btn" data-detail-pin="${_esc(id)}">Pin / Unpin</button>
   `;
 }
+
+const _V2_AGENT_ACTIONS = {
+  research: 'market_opportunity_report',
+  business: 'monetisation_report',
+  architect: 'architecture_review',
+  developer: 'codebase_review',
+  marketing: 'launch_strategy',
+};
 
 async function _loadDetailContext(projectId) {
   try {
@@ -194,18 +220,26 @@ function _renderDetail() {
   const ctx = _detailCtx?.ok && _detailCtx.project?.id === p.id ? _detailCtx : null;
   const meta = ctx?.index_meta || {};
   const fin = ctx?.finance || {};
-  const potential = ctx?.potential_score ?? '—';
-  const direction = ctx?.proposed_direction || 'Run Architect Plan or Business Analysis to generate a proper direction.';
+  const v2 = ctx?.summary_v2 || (ctx?.summary?.index_version === 2 ? ctx.summary : null) || _v2Meta(p) || {};
+  const potential = v2.potential_score ?? ctx?.potential_score ?? '—';
+  const stage = v2.current_stage || 'unknown';
+  const purpose = v2.what_it_appears_to_do || ctx?.proposed_direction || 'Run Deep Index to generate project understanding.';
+  const nextStep = (v2.recommended_next_steps || [])[0] || '';
+  const missing = (v2.missing_pieces || []).slice(0, 3);
+  const monetisation = (v2.monetisation_options || []).slice(0, 3);
   if (detailBody) {
     detailBody.innerHTML = `
       <p class="atlas-detail-path">${_esc(p.display_path || p.path || 'No path')}</p>
       <p><strong>Stack</strong> ${_esc((p.detected_stack || []).join(' · ') || p.type || '—')}</p>
       <p><strong>Files</strong> ${meta.file_count || p.file_count || 0} · ${_fmtBytes(meta.folder_size_bytes)}</p>
       <p><strong>Indexed</strong> ${p.last_indexed_at ? new Date(p.last_indexed_at).toLocaleString() : 'Not indexed'}</p>
+      <p><strong>V2 stage</strong> ${_esc(stage)} · <strong>Score</strong> ${potential}/100</p>
       <p><strong>Changes</strong> ${_changeCount(p)}</p>
-      <p><strong>Potential</strong> ${potential}/100</p>
-      <p class="atlas-detail-direction">${_esc(direction)}</p>
-      ${fin.monetisation_strategy ? `<p><strong>Monetisation</strong> ${_esc(fin.monetisation_strategy.slice(0, 160))}</p>` : ''}
+      <p class="atlas-detail-direction">${_esc(purpose)}</p>
+      ${nextStep ? `<p><strong>Next step</strong> ${_esc(nextStep)}</p>` : ''}
+      ${missing.length ? `<p><strong>Missing</strong> ${_esc(missing.join('; '))}</p>` : ''}
+      ${monetisation.length ? `<p><strong>Monetisation</strong> ${_esc(monetisation.join('; '))}</p>` : ''}
+      ${fin.monetisation_strategy ? `<p><strong>Finance note</strong> ${_esc(fin.monetisation_strategy.slice(0, 160))}</p>` : ''}
       ${ctx?.reports?.length ? `<p><strong>Reports</strong> ${ctx.reports.length} recent</p>` : ''}
     `;
   }
@@ -234,6 +268,13 @@ function _renderDetail() {
 
 async function _selectProject(id) {
   _selectedId = id;
+  const proj = _projects.find((p) => p.id === id);
+  AtlasVoiceContext.set({
+    currentProjectId: id,
+    currentProjectName: proj?.name || id,
+    currentSelectionType: 'project',
+    currentSelectionLabel: proj?.name || id,
+  });
   _renderCards();
   await _loadDetailContext(id);
   _renderDetail();
@@ -320,6 +361,27 @@ async function _indexAllProjects() {
     if (_deps.showToast) _deps.showToast(msg);
   } else if (_deps.showToast) {
     _deps.showToast(data.message || 'Index all failed');
+  }
+}
+
+async function _deepIndexAllProjects() {
+  if (_deps.showToast) _deps.showToast('Deep indexing all projects (V2)…');
+  const res = await fetch('/api/atlas/projects/index-all-v2', {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+  const data = await res.json();
+  if (data.ok) {
+    _projects = data.projects || _projects;
+    _renderWorkspace();
+    _renderCards();
+    if (_selectedId) await _loadDetailContext(_selectedId);
+    _renderDetail();
+    let msg = data.message || 'Deep index complete';
+    if (data.errors?.length) msg += ` (${data.errors.length} error(s))`;
+    if (_deps.showToast) _deps.showToast(msg);
+  } else if (_deps.showToast) {
+    _deps.showToast(data.message || 'Deep index all failed');
   }
 }
 
@@ -432,11 +494,44 @@ async function _indexProject(id) {
         if (i >= 0) _projects[i] = data.project;
       }
       _selectedId = id;
+      await _loadDetailContext(id);
       _renderCards();
       _renderDetail();
       if (_deps.showToast) _deps.showToast(data.briefing || data.summary?.summary || 'Index complete');
     } else if (_deps.showToast) {
       _deps.showToast(data.message || 'Index failed');
+    }
+  } finally {
+    if (card) card.classList.remove('atlas-project-card--indexing');
+  }
+}
+
+async function _deepIndexProject(id) {
+  const card = document.querySelector(`[data-project-id="${id}"]`);
+  if (card) card.classList.add('atlas-project-card--indexing');
+  if (_deps.showToast) _deps.showToast('Deep indexing project (V2)…');
+  try {
+    const res = await fetch(`/api/atlas/projects/${id}/index-v2`, {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (data.project) {
+        const i = _projects.findIndex(p => p.id === id);
+        if (i >= 0) _projects[i] = data.project;
+      }
+      _selectedId = id;
+      await _loadDetailContext(id);
+      _renderCards();
+      _renderDetail();
+      const score = data.summary?.potential_score;
+      const msg = score != null
+        ? `Deep index complete — score ${score}/100`
+        : (data.briefing || data.message || 'Deep index complete');
+      if (_deps.showToast) _deps.showToast(msg);
+    } else if (_deps.showToast) {
+      _deps.showToast(data.message || 'Deep index failed');
     }
   } finally {
     if (card) card.classList.remove('atlas-project-card--indexing');
@@ -452,6 +547,26 @@ async function _runAgent(agentId, action, projectId) {
   });
   const data = await res.json();
   if (_deps.showToast) _deps.showToast(data.message || (data.ok ? 'Report queued' : 'Failed'));
+  return data;
+}
+
+async function _runAgentV2(agentKey, projectId) {
+  const action = _V2_AGENT_ACTIONS[agentKey];
+  if (!action) return;
+  return _runAgent(agentKey, action, projectId);
+}
+
+async function _runCouncilReview(projectId, stage) {
+  if (_deps.showToast) _deps.showToast(stage ? `Council stage: ${stage}…` : 'Starting council review (research)…');
+  const res = await fetch(`/api/atlas/council/review/${projectId}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stage ? { stage } : {}),
+  });
+  const data = await res.json();
+  if (_deps.showToast) _deps.showToast(data.message || (data.ok ? 'Council report ready' : 'Council review failed'));
+  return data;
 }
 
 async function _developerReview(id) {
@@ -491,23 +606,36 @@ async function _openSummary(id) {
   }
   const s = data.summary;
   const p = _projects.find(x => x.id === id);
-  _el('atlas-project-summary-agent').textContent = (p?.detected_stack || []).join(' · ') || 'Project';
+  const isV2 = s.index_version === 2 || s.potential_score != null;
+  _el('atlas-project-summary-agent').textContent = [
+    (p?.detected_stack || []).join(' · ') || s.project_type || 'Project',
+    isV2 ? `V2 · ${s.current_stage || 'unknown'} · ${s.potential_score ?? '—'}/100` : '',
+  ].filter(Boolean).join(' · ');
   _el('atlas-project-summary-title').textContent = s.name || p?.name || 'Summary';
   _el('atlas-project-summary-meta').textContent = [
     s.last_indexed_at ? new Date(s.last_indexed_at).toLocaleString() : '',
     `${s.file_count || 0} files`,
+    s.folder_size_mb ? `${s.folder_size_mb} MB` : '',
     s.ignored_count ? `${s.ignored_count} ignored` : '',
   ].filter(Boolean).join(' · ');
-  _el('atlas-project-summary-text').textContent = s.summary || '';
+  _el('atlas-project-summary-text').textContent = s.what_it_appears_to_do || s.summary || '';
   const body = _el('atlas-project-summary-body');
   if (body) {
     const imp = (s.important_files || []).map(f => `<li>${_esc(f)}</li>`).join('') || '<li>None</li>';
     const ch = (s.recent_changes || []).map(f => `<li>${_esc(f)}</li>`).join('') || '<li>None</li>';
-    const qs = (s.next_questions || []).map(q => `<li>${_esc(q)}</li>`).join('');
+    const steps = (s.recommended_next_steps || s.next_questions || []).map(q => `<li>${_esc(q)}</li>`).join('');
+    const missing = (s.missing_pieces || []).map(m => `<li>${_esc(m)}</li>`).join('');
+    const money = (s.monetisation_options || []).map(m => `<li>${_esc(m)}</li>`).join('');
+    const risks = (s.risk_flags || []).map(r => `<li>${_esc(r)}</li>`).join('');
     body.innerHTML = `
+      ${s.strengths?.length ? `<h3>Strengths</h3><ul>${s.strengths.map(x => `<li>${_esc(x)}</li>`).join('')}</ul>` : ''}
+      ${s.weaknesses?.length ? `<h3>Weaknesses</h3><ul>${s.weaknesses.map(x => `<li>${_esc(x)}</li>`).join('')}</ul>` : ''}
       <h3>Important files</h3><ul>${imp}</ul>
       <h3>Recent changes</h3><ul>${ch}</ul>
-      ${qs ? `<h3>Suggested next steps</h3><ul>${qs}</ul>` : ''}
+      ${missing ? `<h3>Missing pieces</h3><ul>${missing}</ul>` : ''}
+      ${money ? `<h3>Monetisation options</h3><ul>${money}</ul>` : ''}
+      ${steps ? `<h3>Recommended next steps</h3><ul>${steps}</ul>` : ''}
+      ${risks ? `<h3>Risk flags</h3><ul>${risks}</ul>` : ''}
     `;
   }
   modal.classList.remove('hidden');
@@ -518,6 +646,7 @@ function _bindEvents() {
   _el('atlas-workspace-save')?.addEventListener('click', _saveWorkspace);
   _el('atlas-workspace-scan')?.addEventListener('click', _scanWorkspace);
   _el('atlas-workspace-index-all')?.addEventListener('click', _indexAllProjects);
+  _el('atlas-workspace-deep-index-all')?.addEventListener('click', _deepIndexAllProjects);
   _el('atlas-workspace-browse')?.addEventListener('click', _browseWorkspaceRoot);
   _el('atlas-workspace-bootstrap')?.addEventListener('click', _bootstrapWorkspace);
   _el('atlas-workspace-setup')?.addEventListener('click', _openSetupModal);
@@ -532,10 +661,21 @@ function _bindEvents() {
     panel.addEventListener('click', (e) => {
       const indexBtn = e.target.closest('[data-index-project]');
       if (indexBtn && !indexBtn.disabled) { _indexProject(indexBtn.dataset.indexProject); return; }
+      const deepBtn = e.target.closest('[data-deep-index-project]');
+      if (deepBtn && !deepBtn.disabled) { _deepIndexProject(deepBtn.dataset.deepIndexProject); return; }
       const reviewBtn = e.target.closest('[data-dev-review]');
       if (reviewBtn) { _developerReview(reviewBtn.dataset.devReview); return; }
+      const agentV2Btn = e.target.closest('[data-agent-v2]');
+      if (agentV2Btn) {
+        _runAgentV2(agentV2Btn.dataset.agentV2, agentV2Btn.dataset.projectId);
+        return;
+      }
+      const councilBtn = e.target.closest('[data-council-review]');
+      if (councilBtn) { _runCouncilReview(councilBtn.dataset.councilReview); return; }
       const summaryBtn = e.target.closest('[data-open-summary]');
       if (summaryBtn) { _openSummary(summaryBtn.dataset.openSummary); return; }
+      const hqBtn = e.target.closest('[data-open-hq]');
+      if (hqBtn) { atlasProjectHQ.openProjectHQ(hqBtn.dataset.openHq); return; }
       const relinkBtn = e.target.closest('[data-relink-project]');
       if (relinkBtn) { _relinkProject(relinkBtn.dataset.relinkProject); return; }
       const askBtn = e.target.closest('[data-detail-ask]');
@@ -560,7 +700,7 @@ function _bindEvents() {
       }
       const card = e.target.closest('[data-project-id]');
       if (card && !e.target.closest('button')) {
-        _selectProject(card.dataset.projectId);
+        atlasProjectHQ.openProjectHQ(card.dataset.projectId);
       }
     });
   }
@@ -608,13 +748,34 @@ export function initAtlasProjects(deps = {}) {
     showToast: deps.showToast,
     openSummary: openProjectSummary,
   });
+  atlasProjectHQ.initAtlasProjectHQ({ showToast: deps.showToast });
   _bindEvents();
+}
+
+export async function selectProject(projectId) {
+  if (!projectId) return;
+  await _selectProject(projectId);
+}
+
+export async function openProjectHQ(projectId) {
+  const pid = projectId || _selectedId;
+  if (!pid) return;
+  await _selectProject(pid);
+  return atlasProjectHQ.openProjectHQ(pid);
 }
 
 const atlasProjectsModule = {
   initAtlasProjects,
   renderProjectsPanel,
   openProjectSummary,
+  selectProject,
+  openProjectHQ,
+};
+
+window.AtlasProjectsUI = {
+  selectProject,
+  openProjectHQ,
+  getSelectedProjectId: () => _selectedId,
 };
 
 export default atlasProjectsModule;

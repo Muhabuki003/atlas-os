@@ -1,9 +1,21 @@
 // Atlas OS — Home conversation log + embedded voice panel (stay on Home)
 
 import atlasVoiceMode from './atlasVoiceMode.js';
+import atlasCursorFx from './atlasCursorFx.js';
+import atlasDesktopCommands from './atlasDesktopCommands.js';
+import atlasActiveProject from './atlasActiveProject.js';
+import atlasVoiceNavigation from './atlasVoiceNavigation.js';
+import atlasVoiceActions from './atlasVoiceActions.js';
+import {
+  findActivationPhrase,
+  findStandbyPhrase,
+  isActivationOnly,
+  stripVoicePrefixes,
+} from './atlasVoicePhrases.js';
+import { cmdHandled, cmdDebug, resultMessage } from './atlasCommandResult.js';
 
 const SETTINGS_KEY = 'atlas_voice_settings';
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 5;
 const MAX_MESSAGES = 5;
 const PROCESSING_TIMEOUT_MS = 60000;
 
@@ -11,8 +23,9 @@ const PREFERRED_VOICE = 'Google UK English Male';
 
 const DEFAULT_SETTINGS = {
   settings_version: SETTINGS_VERSION,
-  conversation_mode_enabled: true,
-  speak_replies: true,
+  conversation_mode_enabled: false,
+  speak_replies: false,
+  passive_wake_enabled: true,
   auto_submit: true,
   selected_voice: PREFERRED_VOICE,
   rate: 0.8,
@@ -21,6 +34,7 @@ const DEFAULT_SETTINGS = {
   interruption_enabled: true,
   follow_up_timeout_ms: 30000,
   silence_submit_delay_ms: 2000,
+  atlas_cursor_effects: true,
 };
 
 let _deps = {};
@@ -48,13 +62,17 @@ export function loadVoiceSettings() {
     const stored = JSON.parse(raw);
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     if (!stored.settings_version || stored.settings_version < SETTINGS_VERSION) {
-      merged.conversation_mode_enabled = true;
-      merged.speak_replies = true;
-      merged.auto_submit = true;
-      merged.rate = DEFAULT_SETTINGS.rate;
-      merged.voice_reply_style = DEFAULT_SETTINGS.voice_reply_style;
-      merged.follow_up_timeout_ms = DEFAULT_SETTINGS.follow_up_timeout_ms;
-      merged.silence_submit_delay_ms = DEFAULT_SETTINGS.silence_submit_delay_ms;
+      if (!stored.settings_version || stored.settings_version < 5) {
+        merged.conversation_mode_enabled = false;
+        merged.speak_replies = false;
+        merged.passive_wake_enabled = true;
+      }
+      merged.auto_submit = merged.auto_submit !== false;
+      merged.rate = merged.rate ?? DEFAULT_SETTINGS.rate;
+      merged.voice_reply_style = merged.voice_reply_style || DEFAULT_SETTINGS.voice_reply_style;
+      merged.follow_up_timeout_ms = merged.follow_up_timeout_ms ?? DEFAULT_SETTINGS.follow_up_timeout_ms;
+      merged.silence_submit_delay_ms = merged.silence_submit_delay_ms ?? DEFAULT_SETTINGS.silence_submit_delay_ms;
+      merged.atlas_cursor_effects = stored.atlas_cursor_effects !== false;
       merged.settings_version = SETTINGS_VERSION;
     }
     return merged;
@@ -70,6 +88,7 @@ export function saveVoiceSettings(patch = {}) {
   } catch (_) {}
   atlasVoiceMode.applySettings?.(_settings);
   _syncSettingsUI();
+  window.atlasVoiceService?.patchSettings?.(_settings);
   return _settings;
 }
 
@@ -92,21 +111,101 @@ function _timeLabel() {
   }
 }
 
+function _syncModePills() {
+  window.atlasVoiceService?.updateHudMeta?.(_settings);
+}
+
+function _playActivationAnimation(online) {
+  const core = _el('atlas-core');
+  const bar = _el('atlas-os-status-bar');
+  const chip = _el('atlas-voice-status-chip');
+  [core, bar].forEach((el) => {
+    if (!el) return;
+    el.classList.remove('atlas-voice-activate-on', 'atlas-voice-activate-off');
+    void el.offsetWidth;
+    el.classList.add(online ? 'atlas-voice-activate-on' : 'atlas-voice-activate-off');
+  });
+  if (chip) {
+    chip.classList.toggle('atlas-voice-chip-online', online);
+    chip.classList.toggle('atlas-voice-chip-standby', !online);
+  }
+}
+
+function _syncModalToggles() {
+  const wakeEl = _el('atlas-voice-wake-mode');
+  const speakModal = _el('atlas-voice-speak-replies');
+  if (wakeEl) wakeEl.checked = !!_settings.conversation_mode_enabled;
+  if (speakModal) speakModal.checked = !!_settings.speak_replies;
+}
+
+export function activateVoiceConversation({ speakGreeting = true, enableSpeak = true } = {}) {
+  const patch = { conversation_mode_enabled: true };
+  if (enableSpeak) patch.speak_replies = true;
+  saveVoiceSettings(patch);
+  _syncModalToggles();
+  _paused = false;
+  atlasVoiceMode.enterConversationMode?.();
+  setVoiceStatus('command-listening', 'ONLINE');
+  _playActivationAnimation(true);
+  _syncModePills();
+  if (speakGreeting) {
+    return atlasVoiceMode.speakText?.('Online sir.', { short: false });
+  }
+  return Promise.resolve();
+}
+
+export async function deactivateVoiceConversation({ speakFarewell = true, disableSpeak = true } = {}) {
+  const patch = { conversation_mode_enabled: false, passive_wake_enabled: true };
+  if (disableSpeak) patch.speak_replies = false;
+  saveVoiceSettings(patch);
+  _syncModalToggles();
+  atlasVoiceMode.exitConversationMode?.();
+  setVoiceStatus('wake-listening', 'Wake Listening');
+  _playActivationAnimation(false);
+  _syncModePills();
+  if (speakFarewell) {
+    await atlasVoiceMode.speakText?.('Standing by sir.', { short: false });
+  }
+  atlasVoiceMode.startPassiveWakeListening?.();
+}
+
 function _syncStatusChip(status, label) {
   const chip = _el('atlas-voice-status-chip');
   if (chip) {
     chip.dataset.status = status || 'idle';
     const text = chip.querySelector('.atlas-voice-status-chip-text');
-    if (text) text.textContent = label || 'Standby';
+    const listening = ['wake-listening', 'command-listening', 'listening', 'recording'].includes(status);
+    if (text) text.textContent = listening ? 'Wake Listening ●' : (label || 'Standby');
   }
-  const panelStatus = _el('atlas-home-voice-status');
-  if (panelStatus) {
-    panelStatus.dataset.status = status || 'idle';
-    panelStatus.textContent = label || 'Standby';
+  atlasVoiceMode.updateVoiceHud?.({ status, label });
+  _syncModePills();
+}
+
+function _notifyComplete(onComplete, result) {
+  if (!onComplete) return;
+  onComplete(result);
+}
+
+async function _applyHandledResult(result, { onComplete, skipUi, speakFn } = {}) {
+  if (!result?.handled) return false;
+  const message = resultMessage(result);
+  const ok = result.ok !== false;
+  cmdDebug('final handled/ok state', { handled: true, ok, spoken: !!result.spoken, message: message.slice(0, 80) });
+  cmdDebug('skipped chat due to handled command');
+
+  atlasVoiceMode.clearCommandInput?.();
+  if (!skipUi && message) _pushMessage('atlas', message);
+
+  let spoken = !!result.spoken;
+  if (!spoken && speakFn && message && _settings.speak_replies) {
+    await speakFn(message);
+    spoken = true;
+  } else if (!_settings.speak_replies) {
+    setVoiceStatus(ok ? 'idle' : 'error', ok ? 'Standby' : 'Error');
   }
-  const micOn = ['wake-listening', 'command-listening', 'listening', 'recording'].includes(status);
-  const dot = _el('atlas-home-voice-mic-dot');
-  if (dot) dot.classList.toggle('atlas-home-voice-mic-dot--active', micOn);
+
+  _notifyComplete(onComplete, cmdHandled(ok, message, { spoken }));
+  return true;
 }
 
 export function setVoiceStatus(status, label) {
@@ -179,20 +278,103 @@ export function clearOverlay() {
   _renderConversation();
 }
 
-export async function submitHomeMessage(text, { onComplete, onError, skipUi = false } = {}) {
-  const msg = (text || '').trim();
+export async function submitHomeMessage(text, { onComplete, onError, skipUi = false, fromVoice = false } = {}) {
+  let msg = (text || '').trim();
   if (!msg || _paused) return false;
 
+  cmdDebug('input', msg.slice(0, 120));
+
+  if (findStandbyPhrase(msg)) {
+    if (!skipUi) _pushMessage('user', msg);
+    await deactivateVoiceConversation({ speakFarewell: true });
+    _notifyComplete(onComplete, cmdHandled(true, 'Standing by sir.', { spoken: true }));
+    return true;
+  }
+
+  if (isActivationOnly(msg)) {
+    if (!skipUi) _pushMessage('user', msg);
+    await activateVoiceConversation({ speakGreeting: true });
+    atlasVoiceMode.enterCommandListening?.();
+    _notifyComplete(onComplete, cmdHandled(true, 'Online sir.', { spoken: true }));
+    return true;
+  }
+
+  msg = stripVoicePrefixes(msg);
+  if (!msg) {
+    _notifyComplete(onComplete, { handled: false, ok: true, message: '', spoken: false });
+    return true;
+  }
+
   if (!skipUi) {
-    _pushMessage('user', msg);
+    _pushMessage('user', fromVoice ? text.trim() : msg);
+  }
+  if (fromVoice) atlasVoiceMode.updateVoiceHud?.({ lastCommand: msg });
+
+  const speakFn = async (reply) => {
+    if (_settings.speak_replies && reply) {
+      setVoiceStatus('speaking', 'Speaking');
+      await atlasVoiceMode.speakText?.(reply, { style: _settings.voice_reply_style });
+    }
+    if (_settings.conversation_mode_enabled && !_paused) {
+      atlasVoiceMode.enterFollowUpListening?.();
+    } else {
+      setVoiceStatus('idle', 'Standby');
+    }
+  };
+
+  if (atlasVoiceNavigation.isDestructiveCommand(msg)) {
+    return _applyHandledResult(
+      cmdHandled(false, 'That action requires confirmation in the UI.'),
+      { onComplete, skipUi, speakFn },
+    );
+  }
+
+  const voiceActionResult = await atlasVoiceActions.tryHandleVoiceAction(msg);
+  if (localStorage.getItem('atlas_voice_debug') === 'true') {
+    console.log('[voice-action] transcript', msg);
+    console.log('[voice-action] context', window.AtlasVoiceContext?.get?.());
+    console.log('[voice-action] executed', voiceActionResult);
+  }
+  if (await _applyHandledResult(voiceActionResult, { onComplete, skipUi, speakFn })) return true;
+
+  const desktopResult = await atlasDesktopCommands.handleDesktopMessage(msg, {
+    activeProjectId: atlasActiveProject.getActiveProjectId?.(),
+    onLog: (role, body, opts = {}) => {
+      if (!skipUi) {
+        if (opts.processing) _pushMessage('atlas', '', { processing: true });
+        else if (body) _pushMessage(role, body);
+      }
+    },
+    speak: _settings.speak_replies ? speakFn : null,
+  });
+  cmdDebug('desktop result', desktopResult);
+  if (await _applyHandledResult(desktopResult, { onComplete, skipUi, speakFn: null })) return true;
+
+  const navResult = await atlasVoiceNavigation.tryHandleNavigation(msg);
+  cmdDebug('navigation result', navResult);
+  if (await _applyHandledResult(navResult, { onComplete, skipUi, speakFn })) return true;
+
+  const projectResult = await atlasVoiceNavigation.tryHandleProjectCommands(msg);
+  cmdDebug('project result', projectResult);
+  if (await _applyHandledResult(projectResult, { onComplete, skipUi, speakFn })) return true;
+
+  const atlasResult = await atlasVoiceNavigation.tryHandleAtlasCommands(msg);
+  cmdDebug('atlas result', atlasResult);
+  if (await _applyHandledResult(atlasResult, { onComplete, skipUi, speakFn })) return true;
+
+  if (!skipUi) {
     _pushMessage('atlas', '', { processing: true });
   }
   setVoiceStatus('processing', 'Processing');
-  _debug('submit', msg.slice(0, 80));
+  _debug('submit chat', msg.slice(0, 80));
 
   if (!_deps.submitChat) {
-    setVoiceStatus('error', 'Error');
     if (!skipUi) _pushMessage('atlas', "Sorry sir, chat isn't available.");
+    if (onComplete) {
+      _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
+    } else {
+      atlasVoiceMode.recoverAfterProcessing?.();
+    }
     if (onError) onError('Chat pipeline unavailable');
     return false;
   }
@@ -203,9 +385,11 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
     settled = true;
     _debug('processing timeout');
     if (!skipUi) _pushMessage('atlas', "Sorry sir, that took too long.");
-    setVoiceStatus('error', 'Error');
-    if (onComplete) onComplete('');
-    else atlasVoiceMode.recoverAfterProcessing?.();
+    if (onComplete) {
+      _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
+    } else {
+      atlasVoiceMode.recoverAfterProcessing?.();
+    }
     if (onError) onError('timeout');
   }, PROCESSING_TIMEOUT_MS);
 
@@ -222,7 +406,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
     _debug('reply', (reply || '').slice(0, 80));
 
     if (onComplete) {
-      onComplete(reply || '');
+      _notifyComplete(onComplete, { handled: false, ok: !!(reply || '').trim(), message: reply || '', spoken: false });
       return true;
     }
 
@@ -241,27 +425,51 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
       settled = true;
       clearTimeout(processingTimer);
       if (!skipUi) _pushMessage('atlas', "Sorry sir, I couldn't complete that request.");
-      setVoiceStatus('error', 'Error');
       _debug('submit error', err?.message);
-      if (onComplete) onComplete('');
-      else atlasVoiceMode.recoverAfterProcessing?.();
+      if (onComplete) {
+        _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
+      } else {
+        atlasVoiceMode.recoverAfterProcessing?.();
+      }
       if (onError) onError(err?.message || 'Request failed');
     }
     return false;
   }
 }
 
+function _toggleConversationMode() {
+  if (_settings.conversation_mode_enabled) {
+    void deactivateVoiceConversation({ speakFarewell: false, disableSpeak: false });
+  } else {
+    void activateVoiceConversation({ speakGreeting: false, enableSpeak: false });
+    atlasVoiceMode.enterCommandListening?.();
+  }
+}
+
+function _toggleSpeakReplies() {
+  const turnOn = !_settings.speak_replies;
+  saveVoiceSettings({ speak_replies: turnOn });
+  atlasVoiceMode.applySettings?.(getVoiceSettings());
+  _syncModalToggles();
+  _syncModePills();
+}
+
+function _togglePassiveWake() {
+  const turnOn = _settings.passive_wake_enabled === false;
+  saveVoiceSettings({ passive_wake_enabled: turnOn });
+  atlasVoiceMode.applySettings?.(getVoiceSettings());
+  if (turnOn && !_settings.conversation_mode_enabled && !_paused) {
+    atlasVoiceMode.startPassiveWakeListening?.();
+    setVoiceStatus('wake-listening', 'Wake Listening');
+  } else if (!turnOn) {
+    atlasVoiceMode.exitConversationMode?.();
+    setVoiceStatus('idle', 'Standby');
+  }
+  _syncModePills();
+}
+
 function _syncSettingsUI() {
-  const convIds = ['atlas-voice-wake-mode', 'atlas-home-conv-mode'];
-  convIds.forEach(id => {
-    const el = _el(id);
-    if (el) el.checked = !!_settings.conversation_mode_enabled;
-  });
-  const speakIds = ['atlas-voice-speak-replies', 'atlas-home-speak-replies'];
-  speakIds.forEach(id => {
-    const el = _el(id);
-    if (el) el.checked = !!_settings.speak_replies;
-  });
+  _syncModalToggles();
   const auto = _el('atlas-voice-auto-submit');
   if (auto) auto.checked = !!_settings.auto_submit;
   const interrupt = _el('atlas-voice-settings-interrupt');
@@ -276,13 +484,7 @@ function _syncSettingsUI() {
     const el = _el(id);
     if (el) el.value = sttVal;
   });
-  _syncPauseButton();
-}
-
-function _syncPauseButton() {
-  const btn = _el('atlas-home-voice-pause');
-  if (!btn) return;
-  btn.textContent = _paused ? 'Resume' : 'Pause';
+  _syncModePills();
 }
 
 function _bindEvents() {
@@ -299,75 +501,48 @@ function _bindEvents() {
     atlasVoiceMode.openVoiceMode?.();
   });
 
-  _el('atlas-home-voice-advanced')?.addEventListener('click', () => {
-    atlasVoiceMode.openVoiceMode?.();
-  });
+  _el('atlas-status-conversation')?.addEventListener('click', () => _toggleConversationMode());
+  _el('atlas-status-speak')?.addEventListener('click', () => _toggleSpeakReplies());
+  _el('atlas-status-passive')?.addEventListener('click', () => _togglePassiveWake());
+}
 
-  const onConvChange = (checked) => {
-    saveVoiceSettings({ conversation_mode_enabled: checked });
-    if (checked && !_paused) {
-      atlasVoiceMode.startHomeConversation?.();
-      setVoiceStatus('wake-listening', 'Wake listening');
-    } else if (!checked) {
-      atlasVoiceMode.stopHomeConversation?.();
-      setVoiceStatus('idle', 'Standby');
-    }
-  };
-
-  _el('atlas-home-conv-mode')?.addEventListener('change', (e) => onConvChange(e.target.checked));
-
-  _el('atlas-home-speak-replies')?.addEventListener('change', (e) => {
-    saveVoiceSettings({ speak_replies: e.target.checked });
-  });
-
-  _el('atlas-home-voice-restart')?.addEventListener('click', () => {
-    _paused = false;
-    _syncPauseButton();
-    saveVoiceSettings({ conversation_mode_enabled: true });
-    atlasVoiceMode.startHomeConversation?.();
-    setVoiceStatus('wake-listening', 'Wake listening');
-  });
-
-  _el('atlas-home-voice-pause')?.addEventListener('click', () => {
-    setPaused(!_paused);
-  });
-
-  _el('atlas-home-stt-mode')?.addEventListener('change', (e) => {
-    atlasVoiceMode.setSttMode?.(e.target.value);
-    const modal = _el('atlas-voice-stt-mode');
-    if (modal) modal.value = e.target.value;
-  });
-
-  _el('atlas-home-tts-voice')?.addEventListener('change', (e) => {
-    saveVoiceSettings({ selected_voice: e.target.value });
-    const modal = _el('atlas-voice-tts-voice');
-    if (modal) modal.value = e.target.value;
-  });
+export function onGlobalVoiceStart() {
+  _syncSettingsUI();
+  if (_paused) {
+    setVoiceStatus('paused', 'Paused');
+    return;
+  }
+  atlasVoiceMode.startPassiveWakeListening?.();
+  if (_settings.conversation_mode_enabled) {
+    atlasVoiceMode.enterConversationMode?.();
+    atlasVoiceMode.enterCommandListening?.();
+    setVoiceStatus('command-listening', 'Listening');
+  } else {
+    setVoiceStatus('wake-listening', 'Passive wake');
+  }
+  _syncModePills();
 }
 
 export function onHomeShown() {
-  _syncSettingsUI();
-  if (_settings.conversation_mode_enabled && !_paused) {
-    atlasVoiceMode.startHomeConversation?.();
-    setVoiceStatus('wake-listening', 'Wake listening');
-  } else if (_paused) {
-    setVoiceStatus('paused', 'Paused');
-  } else {
-    setVoiceStatus('idle', 'Standby');
-  }
+  onGlobalVoiceStart();
 }
 
 export function setPaused(paused) {
   if (_paused === paused) return;
   _paused = paused;
-  _syncPauseButton();
   if (_paused) {
     atlasVoiceMode.pauseHomeConversation?.();
     setVoiceStatus('paused', 'Paused');
-  } else if (_settings.conversation_mode_enabled) {
-    atlasVoiceMode.resumeHomeConversation?.();
-    setVoiceStatus('wake-listening', 'Wake listening');
+  } else {
+    atlasVoiceMode.startPassiveWakeListening?.();
+    if (_settings.conversation_mode_enabled) {
+      atlasVoiceMode.enterCommandListening?.();
+      setVoiceStatus('command-listening', 'Listening');
+    } else {
+      setVoiceStatus('wake-listening', 'Passive wake');
+    }
   }
+  _syncModePills();
 }
 
 export function isPaused() {
@@ -386,18 +561,27 @@ export function initAtlasHomeConversation(deps = {}) {
   atlasVoiceMode.initHomeConversation?.({
     settings: () => _settings,
     saveSettings: saveVoiceSettings,
-    submitMessage: submitHomeMessage,
+    submitMessage: (t, opts) => submitHomeMessage(t, { ...opts, fromVoice: true }),
     setStatus: setVoiceStatus,
     showOverlay,
     updateOverlayReply,
     isPaused: () => _paused,
     setPaused,
     isConversationEnabled: () => _settings.conversation_mode_enabled,
+    onActivate: () => activateVoiceConversation({ speakGreeting: false }),
+    onDeactivate: () => deactivateVoiceConversation({ speakFarewell: false }),
   });
 
-  if (_settings.conversation_mode_enabled && window.homeModule?.isHomeActive?.()) {
-    requestAnimationFrame(() => onHomeShown());
-  }
+  try {
+    atlasCursorFx.initAtlasCursorFx?.();
+    const cursorOff = _settings.atlas_cursor_effects === false
+      || (typeof localStorage !== 'undefined' && localStorage.getItem('atlas_cursor_fx') === 'off');
+    if (cursorOff) {
+      atlasCursorFx.setCursorFxEnabled?.(false);
+    }
+  } catch (_) {}
+
+  requestAnimationFrame(() => onGlobalVoiceStart());
 }
 
 const atlasHomeConversation = {
@@ -411,8 +595,11 @@ const atlasHomeConversation = {
   getVoiceSettings,
   saveVoiceSettings,
   onHomeShown,
+  onGlobalVoiceStart,
   setPaused,
   isPaused,
+  activateVoiceConversation,
+  deactivateVoiceConversation,
 };
 
 export default atlasHomeConversation;

@@ -543,6 +543,18 @@ def format_summaries_for_agents(summaries: List[Dict[str, Any]]) -> str:
             lines.append(f"- Important files: {', '.join(s['important_files'][:12])}")
         if s.get("recent_changes"):
             lines.append(f"- Recent changes: {', '.join(s['recent_changes'][:8])}")
+        if s.get("index_version") == 2 or s.get("potential_score"):
+            lines.append(f"- Stage: {s.get('current_stage', 'unknown')} | Score: {s.get('potential_score', '—')}")
+        if s.get("what_it_appears_to_do"):
+            lines.append(f"- Purpose: {s['what_it_appears_to_do']}")
+        if s.get("recommended_next_steps"):
+            steps = s["recommended_next_steps"]
+            if isinstance(steps, list) and steps:
+                lines.append(f"- Next: {steps[0]}")
+        if s.get("monetisation_options"):
+            opts = s["monetisation_options"]
+            if isinstance(opts, list) and opts:
+                lines.append(f"- Monetisation: {opts[0]}")
         lines.append(f"- Summary: {s.get('summary', '')}")
         lines.append("")
     return "\n".join(lines).strip()
