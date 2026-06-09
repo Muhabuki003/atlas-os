@@ -16,7 +16,7 @@ _DEFAULT: Dict[str, Any] = {
     "rules": [
         "Agents generate reports only unless approved.",
         "No posting, payments, or code execution without approval.",
-        "Business goal is to help Patryk make money ethically and practically.",
+        "Business goal is to help the user make progress ethically and practically.",
     ],
 }
 

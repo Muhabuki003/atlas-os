@@ -1,7 +1,7 @@
 """Tests for Atlas Reasoning Audit V1."""
 
 from src.atlas_reasoning_audit import (
-    _audit_houseify,
+    _audit_flagged_project,
     _detect_feature_groups,
     _scan_hardcoded_in_source,
     run_reasoning_audit,
@@ -20,10 +20,10 @@ def test_detect_feature_groups_finds_auth_and_schema():
     assert feats["has_routes"]
 
 
-def test_audit_houseify_flags_auth_warning():
+def test_audit_flagged_project_flags_auth_warning():
     projects = [{
-        "project_id": "houseify",
-        "name": "Houseify",
+        "project_id": "sampleapp",
+        "name": "SampleApp",
         "features_detected": {
             "has_auth": True,
             "auth_files": ["src/auth/login.tsx"],
@@ -36,7 +36,7 @@ def test_audit_houseify_flags_auth_warning():
         },
         "auth_summary_warnings": ["Possible outdated/incomplete project summary."],
     }]
-    result = _audit_houseify(projects)
+    result = _audit_flagged_project(projects)
     assert result is not None
     assert result["checks"]["auth_files"]
     assert result["warnings"]

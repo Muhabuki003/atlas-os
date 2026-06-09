@@ -89,7 +89,7 @@ def load_registry(force_reload: bool = False) -> List[Dict[str, Any]]:
         apps = data.get("apps") if isinstance(data, dict) else None
         if not isinstance(apps, list):
             apps = []
-        _registry_cache = [a for a in apps if isinstance(a, dict) and a.get("enabled", True)]
+        _registry_cache = [a for a in apps if isinstance(a, dict)]
     except (OSError, json.JSONDecodeError):
         _registry_cache = []
     return _registry_cache
@@ -109,6 +109,8 @@ def build_alias_index() -> Dict[str, str]:
         return _alias_index_cache
     index: Dict[str, str] = {}
     for app in load_registry():
+        if not app.get("enabled", True):
+            continue
         app_id = (app.get("id") or "").lower()
         if not app_id:
             continue
@@ -362,6 +364,18 @@ def resolve_app(app_name: str) -> Dict[str, Any]:
             "source": "",
             "message": f"App '{app_id}' is not registered in apps.json.",
             "attempted_paths": [],
+        }
+    if not app.get("enabled", True):
+        display = app.get("display_name") or app_id
+        return {
+            "ok": False,
+            "app": app_id,
+            "available": False,
+            "path": None,
+            "source": "",
+            "message": f"{display} is disabled in apps.json. Set enabled: true after configuring the path.",
+            "attempted_paths": [],
+            "enabled": False,
         }
     result = resolve_app_entry(app)
     result["app"] = app_id

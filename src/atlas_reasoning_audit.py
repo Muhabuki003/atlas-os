@@ -22,8 +22,8 @@ from src.atlas_project_index import load_all_summaries, load_index, load_summary
 from src.atlas_projects import build_project_context
 from src.atlas_workspace import load_workspace
 
-_SEED_NAMES = {"houseify", "transportos"}
-_HARDCODE_MARKERS = ("houseify", "transportos")
+_SEED_NAMES: frozenset[str] = frozenset()
+_HARDCODE_MARKERS: tuple[str, ...] = ()
 _AUTH_PATH_RE = re.compile(
     r"(auth|login|signin|signup|session|jwt|oauth|middleware|protected|guard)",
     re.I,
@@ -64,16 +64,10 @@ def _line_is_seed_bias(rel: str, line: str) -> bool:
             return False
         bias_patterns = (
             'get("current_focus"',
-            '"houseify and transportos"',
-            "houseify-adjacent",
-            "transportos wedge",
-            'else "houseify"',
-            'else "transportos"',
-            "prioritise ideas that align with houseify",
         )
         return any(p in low for p in bias_patterns) or (
-            any(m in low for m in _HARDCODE_MARKERS)
-            and any(k in low for k in ("fallback", "default", "primary", "target =", "focus ="))
+            any(k in low for k in ("fallback", "default", "primary", "target =", "focus ="))
+            and "current_focus" in low
         )
     if "agents.json" in rel and "config/atlas" in rel.replace("\\", "/"):
         if any(k in low for k in ("current_task", "last_report")):
@@ -106,7 +100,7 @@ def _scan_hardcoded_in_source() -> List[Dict[str, Any]]:
             if not _line_is_seed_bias(rel, line):
                 continue
             low = line.lower()
-            marker = next((m for m in _HARDCODE_MARKERS if m in low), _HARDCODE_MARKERS[0])
+            marker = next((m for m in _HARDCODE_MARKERS if m in low), "hardcoded_focus_bias")
             key = f"{rel}:{i}"
             if key in seen:
                 continue
@@ -174,9 +168,8 @@ def _active_focus_audit() -> Dict[str, Any]:
 
     seed_hits = []
     for p in projects:
-        pid = (p.get("id") or "").lower()
-        if pid in _SEED_NAMES and not (p.get("path") or "").strip():
-            seed_hits.append(p.get("name") or pid)
+        if not (p.get("path") or "").strip():
+            seed_hits.append(p.get("name") or p.get("id") or "unknown")
 
     config_exists = (Path(__file__).resolve().parent.parent / "config" / "atlas" / "projects.json").is_file()
 
@@ -325,15 +318,12 @@ def _audit_project(project: Dict[str, Any], ddir: Path) -> Dict[str, Any]:
     }
 
 
-def _audit_houseify(projects_audit: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    houseify = next(
-        (p for p in projects_audit if (p.get("project_id") or "").lower() == "houseify"
-         or (p.get("name") or "").lower() == "houseify"),
-        None,
-    )
-    if not houseify:
+def _audit_flagged_project(projects_audit: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Return feature audit for the first project with auth/summary warnings."""
+    flagged = next((p for p in projects_audit if p.get("auth_summary_warnings")), None)
+    if not flagged:
         return None
-    feats = houseify.get("features_detected") or {}
+    feats = flagged.get("features_detected") or {}
     checks = {
         "auth_files": feats.get("has_auth"),
         "database_schema": feats.get("has_database"),
@@ -343,10 +333,11 @@ def _audit_houseify(projects_audit: List[Dict[str, Any]]) -> Optional[Dict[str, 
         "login_auth_logic": feats.get("has_auth"),
     }
     return {
-        "project_id": houseify.get("project_id"),
+        "project_id": flagged.get("project_id"),
+        "project_name": flagged.get("name"),
         "checks": checks,
         "detected_files": feats,
-        "warnings": houseify.get("auth_summary_warnings") or [],
+        "warnings": flagged.get("auth_summary_warnings") or [],
         "indexed_features_count": sum(1 for v in checks.values() if v),
         "appears_base44_download": feats.get("has_supabase") or feats.get("has_database"),
     }
@@ -398,7 +389,7 @@ def _build_recommendations(
     projects: List[Dict[str, Any]],
     agents: List[Dict[str, Any]],
     hardcoded: List[Dict[str, Any]],
-    houseify: Optional[Dict[str, Any]],
+    flagged_project: Optional[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     recs: List[Dict[str, Any]] = []
 
@@ -406,8 +397,8 @@ def _build_recommendations(
         recs.append({
             "priority": 1,
             "area": "active_focus",
-            "issue": "Seed projects without workspace paths",
-            "fix": "Run workspace scan and link Houseify/TransportOS to real folders, or archive unused seed entries.",
+            "issue": "Projects without workspace paths",
+            "fix": "Run workspace scan and link projects to real folders, or archive unused entries.",
         })
     if focus.get("profile_focus_text") and any(
         m in (focus.get("profile_focus_text") or "").lower() for m in _HARDCODE_MARKERS
@@ -453,12 +444,13 @@ def _build_recommendations(
             "projects": stale,
         })
 
-    if houseify and houseify.get("warnings"):
+    if flagged_project and flagged_project.get("warnings"):
+        pname = flagged_project.get("project_name") or flagged_project.get("project_id") or "project"
         recs.append({
             "priority": 1,
-            "area": "houseify",
-            "issue": "Houseify summary may be outdated vs indexed auth/schema files",
-            "fix": "Re-run Deep Index V2 on Houseify and verify missing_pieces reflects existing auth.",
+            "area": "project_summary",
+            "issue": f"{pname} summary may be outdated vs indexed auth/schema files",
+            "fix": f"Re-run Deep Index V2 on {pname} and verify missing_pieces reflects existing auth.",
         })
 
     fallback_agents = [a["name"] for a in agents if a.get("using_generic_fallback")]
@@ -491,9 +483,9 @@ def run_reasoning_audit() -> Dict[str, Any]:
     hardcoded = _scan_hardcoded_in_source()
     projects_raw = [p for p in load_projects() if (p.get("status") or "active").lower() != "archived"]
     projects_audit = [_audit_project(p, ddir) for p in projects_raw]
-    houseify = _audit_houseify(projects_audit)
+    flagged_project = _audit_flagged_project(projects_audit)
     agents_audit = _audit_agents(ddir)
-    recommendations = _build_recommendations(focus, projects_audit, agents_audit, hardcoded, houseify)
+    recommendations = _build_recommendations(focus, projects_audit, agents_audit, hardcoded, flagged_project)
 
     using_real = any(p.get("using_real_files") for p in projects_audit)
     needs_deep = [p["project_id"] for p in projects_audit if not p.get("deep_indexed") and p.get("path")]
@@ -529,7 +521,7 @@ def run_reasoning_audit() -> Dict[str, Any]:
             ),
         },
         "projects": projects_audit,
-        "houseify_audit": houseify,
+        "flagged_project_audit": flagged_project,
         "agents": agents_audit,
         "recommended_fixes": recommendations,
         "summary": {

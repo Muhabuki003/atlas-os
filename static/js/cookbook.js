@@ -1977,6 +1977,7 @@ export async function open(opts) {
     _content.style.opacity = '';
   }
   modal.style.display = '';
+  if (document.body.classList.contains('atlas-os')) modal.classList.add('atlas-overlay-modal');
   Modals.register('cookbook-modal', {
     railBtnId: 'rail-cookbook',
     sidebarBtnId: 'tool-cookbook-btn',

@@ -7,6 +7,8 @@ import { makeWindowDraggable } from './windowDrag.js';
 import { clearDockSide } from './modalSnap.js';
 import { sortModelIds } from './modelSort.js';
 import { isAltGrEvent } from './platform.js';
+import atlasUserSettings from './atlasUserSettings.js';
+import atlasPersonality from './atlasPersonality.js';
 
 let initialized = false;
 let modalEl = null;
@@ -1606,9 +1608,109 @@ async function initAgentSettings() {
 /* ═══════════════════════════════════════════
    APPEARANCE TAB
    ═══════════════════════════════════════════ */
+function _radioValue(name) {
+  const node = document.querySelector(`input[name="${name}"]:checked`);
+  return node?.value || '';
+}
+
+function _setRadio(name, value) {
+  document.querySelectorAll(`input[name="${name}"]`).forEach((node) => {
+    node.checked = node.value === value;
+  });
+}
+
+function _populateAtlasVoiceSelect(selected) {
+  const sel = el('atlas-setting-voice');
+  if (!sel || !window.speechSynthesis) return;
+  const voices = window.speechSynthesis.getVoices().filter((v) => (v.lang || '').toLowerCase().startsWith('en'));
+  const list = voices.length ? voices : window.speechSynthesis.getVoices();
+  sel.innerHTML = list.map((v) => {
+    const name = v.name.replace(/"/g, '&quot;');
+    const pick = selected === v.name ? ' selected' : '';
+    return `<option value="${name}"${pick}>${v.name} (${v.lang})</option>`;
+  }).join('');
+  if (selected && !sel.value) sel.value = selected;
+}
+
+async function _syncAtlasProfileForm() {
+  const s = atlasUserSettings.getAtlasUserSettings();
+  const hint = el('atlas-profile-voice-hint');
+  _setRadio('atlas-setting-identity', s.assistant_identity || 'Atlas');
+  _setRadio('atlas-setting-address', s.preferred_address || s.address_style || 'sir');
+  _setRadio('atlas-setting-theme', s.theme || 'default-blue');
+  _setRadio('atlas-setting-response', s.response_style || 'professional');
+  _populateAtlasVoiceSelect(s.preferred_voice);
+  const rateEl = el('atlas-setting-speech-rate');
+  const rateVal = el('atlas-setting-speech-rate-val');
+  if (rateEl) rateEl.value = String(s.speech_rate || 1);
+  if (rateVal) rateVal.textContent = `${Number(s.speech_rate || 1).toFixed(1)}×`;
+  if (hint) {
+    const addr = atlasPersonality.getAddress() || 'none';
+    hint.textContent = `${s.assistant_identity || 'Atlas'} · ${s.preferred_voice || '—'} · ${addr} · ${atlasUserSettings.THEMES[s.theme]?.label || s.theme}`;
+  }
+}
+
+function _bindAtlasProfileSettings() {
+  const card = el('atlas-profile-settings-card');
+  if (!card || card.dataset.bound) return;
+  card.dataset.bound = '1';
+
+  const apply = async (opts = {}) => {
+    const identity = _radioValue('atlas-setting-identity') || 'Atlas';
+    const voiceSel = el('atlas-setting-voice');
+    const rateEl = el('atlas-setting-speech-rate');
+    const patch = {
+      assistant_identity: identity,
+      preferred_address: _radioValue('atlas-setting-address') || 'sir',
+      address_style: _radioValue('atlas-setting-address') || 'sir',
+      theme: _radioValue('atlas-setting-theme') || 'default-blue',
+      response_style: _radioValue('atlas-setting-response') || 'professional',
+      speech_rate: rateEl ? Number(rateEl.value) : 1,
+      preferred_voice: voiceSel?.value || undefined,
+    };
+    if (identity === 'Atlasia' && !voiceSel?.value) {
+      patch.voice_gender = 'female';
+      patch.preferred_voice = 'Google UK English Female';
+    } else if (identity === 'Atlas' && !voiceSel?.value) {
+      patch.voice_gender = 'male';
+      patch.preferred_voice = 'Google UK English Male';
+    }
+    const hadTheme = patch.theme !== atlasUserSettings.getAtlasUserSettings().theme;
+    const hadIdentity = patch.assistant_identity !== atlasUserSettings.getAtlasUserSettings().assistant_identity;
+    const hadAddress = patch.preferred_address !== atlasUserSettings.getAtlasUserSettings().preferred_address;
+    await atlasUserSettings.patchAtlasUserSettings(patch, { animateTheme: hadTheme });
+    await _syncAtlasProfileForm();
+    if (opts.toast === 'theme' || hadTheme) atlasUserSettings.toastThemeChange(patch.theme);
+    else if (opts.toast === 'identity' || hadIdentity) atlasUserSettings.toastIdentityChange(patch.assistant_identity);
+    else if (opts.toast === 'address' || hadAddress) atlasUserSettings.toastAddressChange(patch.preferred_address);
+    else if (uiModule?.showToast) uiModule.showToast('✓ Atlas profile updated');
+  };
+
+  card.querySelectorAll('input[type="radio"]').forEach((node) => {
+    node.addEventListener('change', () => { void apply(); });
+  });
+  const voiceSel = el('atlas-setting-voice');
+  if (voiceSel) voiceSel.addEventListener('change', () => { void apply(); });
+  const rateEl = el('atlas-setting-speech-rate');
+  if (rateEl) {
+    rateEl.addEventListener('input', () => {
+      const val = el('atlas-setting-speech-rate-val');
+      if (val) val.textContent = `${Number(rateEl.value).toFixed(1)}×`;
+    });
+    rateEl.addEventListener('change', () => { void apply(); });
+  }
+  if (window.speechSynthesis) {
+    window.speechSynthesis.addEventListener('voiceschanged', () => _populateAtlasVoiceSelect(atlasUserSettings.getAtlasUserSettings().preferred_voice));
+  }
+}
+
 function initAppearance() {
   syncAppearanceCheckboxes();
   syncPrivacyCheckboxes();
+  void atlasUserSettings.loadAtlasUserSettings().then(() => {
+    _syncAtlasProfileForm();
+    _bindAtlasProfileSettings();
+  });
 
   modalEl.querySelectorAll('[data-ui-key]').forEach(function(chk) {
     chk.addEventListener('change', async function() {

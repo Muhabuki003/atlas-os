@@ -50,15 +50,11 @@ def save_briefing_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _greeting_sir(profile: Dict[str, Any]) -> str:
-    hour = datetime.now().hour
-    if hour < 12:
-        part = "morning"
-    elif hour < 17:
-        part = "afternoon"
-    else:
-        part = "evening"
-    address = (profile.get("preferred_address") or "sir").strip() or "sir"
-    return f"Good {part}, {address}"
+    from src.atlas_personality import get_greeting
+    from src.atlas_user_settings import load_user_settings
+
+    settings = load_user_settings()
+    return get_greeting(settings)
 
 
 def _project_score(p: Dict[str, Any], summary: Optional[Dict[str, Any]]) -> int:

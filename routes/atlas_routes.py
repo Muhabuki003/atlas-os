@@ -111,6 +111,25 @@ class FinanceEntryUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class GoalPatchRequest(BaseModel):
+    title: Optional[str] = None
+    type: Optional[str] = None
+    current: Optional[float] = None
+    target: Optional[float] = None
+    currency: Optional[str] = None
+
+
+class UserSettingsPatchRequest(BaseModel):
+    assistant_identity: Optional[str] = None
+    voice_gender: Optional[str] = None
+    preferred_voice: Optional[str] = None
+    preferred_address: Optional[str] = None
+    address_style: Optional[str] = None
+    theme: Optional[str] = None
+    speech_rate: Optional[float] = None
+    response_style: Optional[str] = None
+
+
 class PipelineCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=256)
     source_agent: str = "research"
@@ -383,6 +402,46 @@ def setup_atlas_routes() -> APIRouter:
         from src.atlas_personal_finance import add_deduction
         body = await request.json()
         return add_deduction(body if isinstance(body, dict) else {})
+
+    @router.get("/goals")
+    async def get_atlas_goals(request: Request):
+        get_current_user(request)
+        from src.atlas_goals import load_goals
+        data = load_goals()
+        return {"ok": True, "goals": data.get("goals") or []}
+
+    @router.post("/goals")
+    async def save_atlas_goals(request: Request):
+        get_current_user(request)
+        from src.atlas_goals import load_goals, save_goals
+        body = await request.json()
+        data = body if isinstance(body, dict) else {}
+        if "goals" not in data:
+            data = load_goals()
+        saved = save_goals(data)
+        return {"ok": True, "goals": saved.get("goals") or []}
+
+    @router.patch("/goals/{goal_id}")
+    async def patch_atlas_goal(goal_id: str, request: Request, body: GoalPatchRequest):
+        get_current_user(request)
+        from src.atlas_goals import patch_goal
+        goal = patch_goal(goal_id, body.model_dump(exclude_unset=True))
+        if not goal:
+            return JSONResponse({"ok": False, "message": "Goal not found"}, status_code=404)
+        return {"ok": True, "goal": goal}
+
+    @router.get("/user-settings")
+    async def get_user_settings(request: Request):
+        get_current_user(request)
+        from src.atlas_user_settings import load_user_settings
+        return {"ok": True, "settings": load_user_settings()}
+
+    @router.patch("/user-settings")
+    async def patch_user_settings(request: Request, body: UserSettingsPatchRequest):
+        get_current_user(request)
+        from src.atlas_user_settings import patch_user_settings
+        settings = patch_user_settings(body.model_dump(exclude_unset=True))
+        return {"ok": True, "settings": settings}
 
     @router.put("/finance")
     async def update_atlas_finance(request: Request, body: FinanceEntryUpdate):

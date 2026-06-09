@@ -19,11 +19,18 @@ venv/
 data/
 !services/hwfit/data/
 !services/hwfit/data/hf_models.json
+data/atlas/tmp*
 logs/
+.workspace/
+AtlasWorkspace/
+desktop_bridge/local_config.json
+desktop_bridge/apps.local.json
 *.log
 *.db
 *.sqlite
 *.sqlite3
+*.key
+*.pem
 
 # Node
 node_modules/

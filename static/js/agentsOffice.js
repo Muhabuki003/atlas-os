@@ -65,6 +65,7 @@ let _briefingFetchedAt = 0;
 let _workingAgents = new Set();
 let _activeReportId = null;
 let _activeAgentOfficeId = null;
+let _messageCaptureActive = false;
 let _linesRaf = 0;
 let _linesRunning = false;
 
@@ -401,20 +402,25 @@ function _closeReportModal() {
   }
 }
 
-export function openReport(reportId) {
-  const report = _findReport(reportId);
+export async function openReportById(reportId) {
+  if (!reportId) return false;
+  let report = _findReport(reportId);
   if (!report) {
-    fetch(`/api/atlas/reports/${reportId}`, { credentials: 'same-origin' })
-      .then(r => r.json())
-      .then((data) => {
-        if (data.ok && data.report) {
-          _reports.unshift(data.report);
-          _openReportPanel(data.report);
-        }
-      });
-    return;
+    try {
+      const data = await fetch(`/api/atlas/reports/${reportId}`, { credentials: 'same-origin' }).then((r) => r.json());
+      if (data.ok && data.report) {
+        _reports.unshift(data.report);
+        report = data.report;
+      }
+    } catch (_) {}
   }
+  if (!report) return false;
   _openReportPanel(report);
+  return true;
+}
+
+export function openReport(reportId) {
+  void openReportById(reportId);
 }
 
 function _openReportPanel(report) {
@@ -464,6 +470,7 @@ function _openReportPanel(report) {
     summaryEl.style.display = report.summary ? '' : 'none';
   }
   bodyEl.innerHTML = _formatReportContent(report.content);
+  bodyEl.scrollTop = 0;
 
   if (actionsEl) {
     const canAct = report.status === 'waiting_for_review';
@@ -487,6 +494,7 @@ function _openReportPanel(report) {
     currentAgentName: report.agent_name || AtlasVoiceContext.get().currentAgentName,
   });
 
+  modal.dataset.activeReportId = report.id;
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
 }
@@ -684,13 +692,70 @@ export function openAgent(agentId) {
   _openAgentOffice(agentId);
 }
 
-export function focusAgentMessage(agentId) {
-  if (agentId && agentId !== _activeAgentOfficeId) _openAgentOffice(agentId);
+function _setCaptureStatus(text, visible = true) {
+  const status = _el('atlas-agent-message-capture-status');
+  if (!status) return;
+  if (!visible || !text) {
+    status.textContent = '';
+    status.classList.add('hidden');
+    return;
+  }
+  status.textContent = text;
+  status.classList.remove('hidden');
+}
+
+export function enterMessageCapture(agentId, label) {
+  const aid = agentId || _activeAgentOfficeId;
+  if (aid && aid !== _activeAgentOfficeId) _openAgentOffice(aid);
+  _messageCaptureActive = true;
+  const agent = _agents.find((a) => a.id === aid);
+  const name = label || agent?.name || 'Agent';
   const input = _el('atlas-agent-message-input');
   if (input) {
+    input.placeholder = 'Speak your message…';
+    input.value = input.value || '';
+    input.classList.add('atlas-agent-message-input--capture');
     input.focus();
     input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+  _setCaptureStatus(`Dictating to ${name}…`);
+  const conv = _el('atlas-agent-office-conversation');
+  conv?.classList.add('atlas-agent-conversation--capture');
+}
+
+export function exitMessageCapture() {
+  _messageCaptureActive = false;
+  const input = _el('atlas-agent-message-input');
+  if (input) {
+    input.placeholder = 'Message this agent…';
+    input.classList.remove('atlas-agent-message-input--capture');
+  }
+  _setCaptureStatus('', false);
+  _el('atlas-agent-office-conversation')?.classList.remove('atlas-agent-conversation--capture');
+}
+
+export function updateAgentMessageDraft(text, agentId) {
+  if (agentId && agentId !== _activeAgentOfficeId) _openAgentOffice(agentId);
+  const input = _el('atlas-agent-message-input');
+  if (input) {
+    input.value = text || '';
+    input.dataset.touched = '1';
+  }
+  if (_messageCaptureActive) {
+    const agent = _agents.find((a) => a.id === (_activeAgentOfficeId || agentId));
+    _setCaptureStatus(`Dictating to ${agent?.name || 'Agent'}… (${(text || '').split(/\s+/).length} words)`);
+  }
+}
+
+export function setAgentGenerating(agentId, label) {
+  if (agentId) _setAgentWorking(agentId, true);
+  _setCaptureStatus(label || 'Generating report…');
+  const sendBtn = _el('atlas-agent-message-send');
+  if (sendBtn) sendBtn.disabled = true;
+}
+
+export function focusAgentMessage(agentId) {
+  enterMessageCapture(agentId);
 }
 
 export function setAgentReportType(agentId, reportType) {
@@ -712,14 +777,59 @@ export async function sendAgentMessage(agentId, message, projectId, reportType) 
   return _sendAgentMessage();
 }
 
+function _pickLatestReport(agentId, projectId) {
+  const all = _reportsForAgent(agentId);
+  const ctxProject = projectId || AtlasVoiceContext.get().currentProjectId;
+  const prefer = (list) => {
+    if (!ctxProject) return list;
+    const linked = list.filter((r) => _projectId(r) === ctxProject);
+    return linked.length ? linked : list;
+  };
+  const waiting = prefer(all.filter((r) => r.status === 'waiting_for_review'));
+  if (waiting.length) {
+    return waiting.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+  }
+  const pending = prefer(all.filter((r) => ['pending', 'generating', 'revision_requested'].includes(r.status)));
+  if (pending.length) return pending[0];
+  if (all.length) return all.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+  return null;
+}
+
+export async function pickLatestReportInfo(agentId) {
+  const aid = agentId || _activeAgentOfficeId || AtlasVoiceContext.get().currentAgentId;
+  if (!aid) return { ok: false, message: 'No agent selected.' };
+  await _fetchReports();
+  const latest = _pickLatestReport(aid);
+  const agent = _agents.find((a) => a.id === aid);
+  const label = agent?.name || aid;
+  if (!latest) return { ok: false, message: `No report found for ${label}.` };
+  return { ok: true, reportId: latest.id, report: latest, message: `Opening latest report for ${label}.` };
+}
+
 export async function openLatestReport(agentId) {
-  const aid = agentId || _activeAgentOfficeId;
-  if (!aid) return false;
-  const buckets = _bucketReports(aid);
-  const latest = buckets.waiting[0] || buckets.pending[0] || _reportsForAgent(aid)[0];
-  if (!latest) return false;
-  openReport(latest.id);
-  return true;
+  const info = await pickLatestReportInfo(agentId);
+  if (!info.ok) return info;
+  await openReportById(info.reportId);
+  return info;
+}
+
+export function showAgentNotice(message) {
+  if (!message) return;
+  _setCaptureStatus(message, true);
+  if (_deps.showToast) _deps.showToast(message);
+}
+
+export function hasOpenModal() {
+  const reportModal = _el('atlas-report-modal');
+  if (reportModal && !reportModal.classList.contains('hidden')) return true;
+  const agentModal = _el('atlas-agent-office-modal');
+  if (agentModal && !agentModal.classList.contains('hidden')) return true;
+  if (window.AtlasOverlayTools?.anyOverlayOpen?.()) return true;
+  const council = _el('atlas-council-modal');
+  if (council && !council.classList.contains('hidden')) return true;
+  const hq = _el('atlas-project-hq');
+  if (hq && !hq.classList.contains('hidden')) return true;
+  return false;
 }
 
 export async function openReportByTitle(query, agentId) {
@@ -742,13 +852,18 @@ export async function actOnReport(reportId, action) {
 }
 
 export async function closeActiveModal() {
-  if (_activeReportId) {
+  const reportModal = _el('atlas-report-modal');
+  if (reportModal && !reportModal.classList.contains('hidden')) {
     _closeReportModal();
     return true;
   }
-  if (_activeAgentOfficeId) {
+  const agentModal = _el('atlas-agent-office-modal');
+  if (agentModal && !agentModal.classList.contains('hidden')) {
     _closeAgentOffice();
     return true;
+  }
+  if (window.AtlasOverlayTools?.anyOverlayOpen?.()) {
+    return window.AtlasOverlayTools.closeTopOverlay();
   }
   const council = _el('atlas-council-modal');
   if (council && !council.classList.contains('hidden')) {
@@ -765,12 +880,12 @@ export async function closeActiveModal() {
 }
 
 async function _sendAgentMessage() {
-  if (!_activeAgentOfficeId) return;
+  if (!_activeAgentOfficeId) return { ok: false, message: 'No agent selected.' };
   const input = _el('atlas-agent-message-input');
   const message = (input?.value || '').trim();
   if (!message) {
     if (_deps.showToast) _deps.showToast('Enter a message for the agent');
-    return;
+    return { ok: false, message: 'No message to send.' };
   }
   const projectId = _el('atlas-agent-message-project')?.value || '';
   const reportType = _el('atlas-agent-message-type')?.value || '';
@@ -778,6 +893,7 @@ async function _sendAgentMessage() {
   if (sendBtn) sendBtn.disabled = true;
   if (input) input.dataset.touched = '1';
   _setAgentWorking(_activeAgentOfficeId, true);
+  setAgentGenerating(_activeAgentOfficeId, 'Generating report…');
 
   try {
     const body = { message };
@@ -794,18 +910,24 @@ async function _sendAgentMessage() {
     if (data.agents) _agents = data.agents;
     if (data.ok && data.report) {
       await _fetchReports();
-      if (input) input.value = '';
-      delete input?.dataset.touched;
+      if (input) {
+        input.value = '';
+        delete input.dataset.touched;
+      }
+      exitMessageCapture();
       _openAgentOffice(_activeAgentOfficeId);
-      openReport(data.report.id);
-    } else {
-      await refreshAgentsOffice();
-      if (_activeAgentOfficeId) _openAgentOffice(_activeAgentOfficeId);
+      await openReportById(data.report.id);
+      return { ok: true, message: 'Research report ready.', report: data.report };
     }
+    await refreshAgentsOffice();
+    if (_activeAgentOfficeId) _openAgentOffice(_activeAgentOfficeId);
+    return { ok: !!data.ok, message: data.message || 'Message failed.' };
   } catch (_) {
     if (_deps.showToast) _deps.showToast('Failed to send message to agent');
+    return { ok: false, message: 'Failed to send message.' };
   } finally {
     _setAgentWorking(_activeAgentOfficeId, false);
+    exitMessageCapture();
     if (sendBtn) sendBtn.disabled = false;
   }
 }
@@ -1096,26 +1218,43 @@ const agentsOfficeModule = {
   startAgentLines,
   stopAgentLines,
   openReport,
+  openReportById,
   openAgent,
   focusAgentMessage,
+  enterMessageCapture,
+  exitMessageCapture,
+  updateAgentMessageDraft,
+  setAgentGenerating,
   sendAgentMessage,
   openLatestReport,
+  pickLatestReportInfo,
   openReportByTitle,
   actOnReport,
   closeActiveModal,
+  hasOpenModal,
+  showAgentNotice,
   setAgentReportType,
 };
 
 window.AtlasAgentsUI = {
   openAgent,
   focusAgentMessage,
+  enterMessageCapture,
+  exitMessageCapture,
+  updateAgentMessageDraft,
+  setAgentGenerating,
   sendAgentMessage,
   openReport,
+  openReportById,
   openLatestReport,
+  pickLatestReportInfo,
   openReportByTitle,
   actOnReport,
   closeActiveModal,
+  hasOpenModal,
+  showAgentNotice,
   setAgentReportType,
+  refreshOffice: refreshAgentsOffice,
 };
 
 export default agentsOfficeModule;

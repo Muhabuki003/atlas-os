@@ -23,6 +23,7 @@ import atlasProjectHQ from './atlasProjectHQ.js';
 import atlasActiveProject from './atlasActiveProject.js';
 import atlasDesktopApps from './atlasDesktopApps.js';
 import atlasReasoningAudit from './atlasReasoningAudit.js';
+import atlasGoals from './atlasGoals.js';
 
 export {
   isAtlasHomeRoute,
@@ -142,6 +143,7 @@ function _renderAll() {
   _renderBriefing();
   _renderProjects();
   _renderAgents();
+  void atlasGoals.renderHomeGoals();
 }
 
 function _renderBriefing() {
@@ -376,6 +378,7 @@ export async function showHome({ skipHistory = false, replace = false } = {}) {
   if (_dataReady) _renderAll();
   await prefetchAtlasData();
   _renderAll();
+  void atlasGoals.renderHomeGoals();
   void _maybeAutoSpeakBriefing();
   void _refreshDesktopControl();
 }

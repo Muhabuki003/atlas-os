@@ -549,6 +549,7 @@ async function _createEventReminder(ev, dueDate) {
 // ── Sidebar collapse ──
 
 function _collapseSidebar() {
+  if (document.body.classList.contains('atlas-os')) return;
   const sb = document.getElementById('sidebar');
   if (sb && !sb.classList.contains('hidden')) {
     // Only remember the prior state on desktop. On mobile the sidebar is an
@@ -602,7 +603,7 @@ function _getModal() {
   if (_modal) return _modal;
   _modal = document.createElement('div');
   _modal.id = 'calendar-modal';
-  _modal.className = 'modal';
+  _modal.className = document.body.classList.contains('atlas-os') ? 'modal atlas-overlay-modal' : 'modal';
   _modal.style.display = 'none';
   _modal.innerHTML = `
     <div class="modal-content cal-modal-content">
@@ -3480,6 +3481,79 @@ window.addEventListener('focus', () => {
 // Calendar reminders are stored as Notes. The Notes reminder loop owns
 // notification dispatch so calendar reminders do not fire twice.
 
-const calendarModule = { openCalendar, closeCalendar, isCalendarOpen };
+export function selectCalendarDay(isoDate) {
+  if (!isoDate) return;
+  const ds = String(isoDate).slice(0, 10);
+  _selectedDay = ds;
+  const [y, m] = ds.split('-').map(Number);
+  if (_open) {
+    _currentDate = new Date(y, m - 1, 1);
+    _view = 'month';
+    _render();
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.cal-day').forEach((el) => el.classList.remove('cal-voice-highlight'));
+      const cell = document.querySelector(`.cal-day[data-date="${ds}"]`);
+      if (cell) {
+        cell.classList.add('cal-voice-highlight');
+        cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    });
+  }
+}
+
+export function voiceEnsureEventForm(dateStr) {
+  if (!_open) return;
+  const ds = dateStr || _selectedDay || _today();
+  _showEventForm(null, ds);
+}
+
+export function voiceFillEventFields(fields = {}) {
+  voiceEnsureEventForm(fields.date);
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val != null && val !== '') {
+      el.value = val;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+  if (fields.title) set('cal-f-sum', fields.title);
+  if (fields.date) set('cal-f-date', fields.date);
+  if (fields.endDate) set('cal-f-date-end', fields.endDate || fields.date);
+  if (fields.startTime) set('cal-f-start', fields.startTime);
+  if (fields.endTime) set('cal-f-end', fields.endTime);
+  if (fields.description) set('cal-f-desc', fields.description);
+  if (fields.allDay) {
+    const ad = document.getElementById('cal-f-allday');
+    if (ad) { ad.checked = true; ad.dispatchEvent(new Event('change', { bubbles: true })); }
+  }
+  const details = document.getElementById('cal-form-details');
+  if (details) {
+    details.setAttribute('aria-hidden', 'false');
+    details.closest('.cal-form')?.classList.add('is-expanded');
+  }
+}
+
+export async function voiceCreateEvent(data) {
+  const date = data.date || _selectedDay || _today();
+  const allDay = !!data.allDay;
+  const body = {
+    summary: data.title || 'Event',
+    dtstart: allDay ? `${date}T00:00:00` : `${date}T${data.startTime || '09:00'}:00`,
+    dtend: allDay ? `${date}T00:00:00` : `${date}T${data.endTime || '10:00'}:00`,
+    all_day: allDay,
+    description: data.description || '',
+  };
+  await _createEvent(body);
+  await _fetchCalendars();
+  selectCalendarDay(date);
+  if (window.uiModule?.showToast) window.uiModule.showToast('Calendar event created.');
+}
+
+export async function refreshCalendarView() {
+  await _fetchCalendars();
+  if (_open) _render();
+}
+
+const calendarModule = { openCalendar, closeCalendar, isCalendarOpen, selectCalendarDay, refreshCalendarView };
 export { openCalendar, openCalendarTo, closeCalendar, isCalendarOpen };
 export default calendarModule;

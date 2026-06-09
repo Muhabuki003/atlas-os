@@ -6,6 +6,7 @@ import atlasDesktopCommands from './atlasDesktopCommands.js';
 import atlasActiveProject from './atlasActiveProject.js';
 import atlasVoiceNavigation from './atlasVoiceNavigation.js';
 import atlasVoiceActions from './atlasVoiceActions.js';
+import atlasVoiceUi from './atlasVoiceUi.js';
 import {
   findActivationPhrase,
   findStandbyPhrase,
@@ -13,13 +14,16 @@ import {
   stripVoicePrefixes,
 } from './atlasVoicePhrases.js';
 import { cmdHandled, cmdDebug, resultMessage } from './atlasCommandResult.js';
+import atlasPersonality from './atlasPersonality.js';
 
 const SETTINGS_KEY = 'atlas_voice_settings';
 const SETTINGS_VERSION = 5;
 const MAX_MESSAGES = 5;
 const PROCESSING_TIMEOUT_MS = 60000;
 
-const PREFERRED_VOICE = 'Google UK English Male';
+function _preferredVoice() {
+  return window.AtlasUserSettings?.getPreferredVoiceName?.() || 'Google UK English Male';
+}
 
 const DEFAULT_SETTINGS = {
   settings_version: SETTINGS_VERSION,
@@ -27,7 +31,7 @@ const DEFAULT_SETTINGS = {
   speak_replies: false,
   passive_wake_enabled: true,
   auto_submit: true,
-  selected_voice: PREFERRED_VOICE,
+  selected_voice: _preferredVoice(),
   rate: 0.8,
   pitch: 1.0,
   voice_reply_style: 'brief',
@@ -149,7 +153,7 @@ export function activateVoiceConversation({ speakGreeting = true, enableSpeak = 
   _playActivationAnimation(true);
   _syncModePills();
   if (speakGreeting) {
-    return atlasVoiceMode.speakText?.('Online sir.', { short: false });
+    return atlasVoiceMode.speakText?.(atlasPersonality.getGreeting(), { short: false });
   }
   return Promise.resolve();
 }
@@ -164,7 +168,7 @@ export async function deactivateVoiceConversation({ speakFarewell = true, disabl
   _playActivationAnimation(false);
   _syncModePills();
   if (speakFarewell) {
-    await atlasVoiceMode.speakText?.('Standing by sir.', { short: false });
+    await atlasVoiceMode.speakText?.(atlasPersonality.getStandby(), { short: false });
   }
   atlasVoiceMode.startPassiveWakeListening?.();
 }
@@ -193,18 +197,30 @@ async function _applyHandledResult(result, { onComplete, skipUi, speakFn } = {})
   cmdDebug('final handled/ok state', { handled: true, ok, spoken: !!result.spoken, message: message.slice(0, 80) });
   cmdDebug('skipped chat due to handled command');
 
+  await atlasVoiceUi.applyVoiceResultUi(result);
+
   atlasVoiceMode.clearCommandInput?.();
-  if (!skipUi && message) _pushMessage('atlas', message);
+  if (!skipUi && message) {
+    const chatMsg = result.speakFull && message.length > 100 ? 'Reading report aloud.' : message;
+    _pushMessage('atlas', chatMsg);
+  }
+
+  const shortSpeak = result.speakFull
+    ? message
+    : (message.length > 120 ? `${message.slice(0, 117)}…` : message);
 
   let spoken = !!result.spoken;
-  if (!spoken && speakFn && message && _settings.speak_replies) {
+  if (!spoken && speakFn && shortSpeak && _settings.speak_replies && !result.speakFull) {
+    await speakFn(shortSpeak);
+    spoken = true;
+  } else if (!spoken && speakFn && message && _settings.speak_replies && result.speakFull) {
     await speakFn(message);
     spoken = true;
   } else if (!_settings.speak_replies) {
     setVoiceStatus(ok ? 'idle' : 'error', ok ? 'Standby' : 'Error');
   }
 
-  _notifyComplete(onComplete, cmdHandled(ok, message, { spoken }));
+  _notifyComplete(onComplete, { ...result, spoken });
   return true;
 }
 
@@ -287,7 +303,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   if (findStandbyPhrase(msg)) {
     if (!skipUi) _pushMessage('user', msg);
     await deactivateVoiceConversation({ speakFarewell: true });
-    _notifyComplete(onComplete, cmdHandled(true, 'Standing by sir.', { spoken: true }));
+    _notifyComplete(onComplete, cmdHandled(true, atlasPersonality.getStandby(), { spoken: true }));
     return true;
   }
 
@@ -295,7 +311,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
     if (!skipUi) _pushMessage('user', msg);
     await activateVoiceConversation({ speakGreeting: true });
     atlasVoiceMode.enterCommandListening?.();
-    _notifyComplete(onComplete, cmdHandled(true, 'Online sir.', { spoken: true }));
+    _notifyComplete(onComplete, cmdHandled(true, atlasPersonality.getGreeting(), { spoken: true }));
     return true;
   }
 
@@ -330,6 +346,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   }
 
   const voiceActionResult = await atlasVoiceActions.tryHandleVoiceAction(msg);
+  // Calendar voice capture handled inside tryHandleVoiceAction
   if (localStorage.getItem('atlas_voice_debug') === 'true') {
     console.log('[voice-action] transcript', msg);
     console.log('[voice-action] context', window.AtlasVoiceContext?.get?.());
@@ -369,7 +386,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   _debug('submit chat', msg.slice(0, 80));
 
   if (!_deps.submitChat) {
-    if (!skipUi) _pushMessage('atlas', "Sorry sir, chat isn't available.");
+    if (!skipUi) _pushMessage('atlas', atlasPersonality.getError("chat isn't available"));
     if (onComplete) {
       _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
     } else {
@@ -384,7 +401,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
     if (settled) return;
     settled = true;
     _debug('processing timeout');
-    if (!skipUi) _pushMessage('atlas', "Sorry sir, that took too long.");
+    if (!skipUi) _pushMessage('atlas', atlasPersonality.getError('that took too long'));
     if (onComplete) {
       _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
     } else {
@@ -424,7 +441,7 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
     if (!settled) {
       settled = true;
       clearTimeout(processingTimer);
-      if (!skipUi) _pushMessage('atlas', "Sorry sir, I couldn't complete that request.");
+      if (!skipUi) _pushMessage('atlas', atlasPersonality.getError("I couldn't complete that request"));
       _debug('submit error', err?.message);
       if (onComplete) {
         _notifyComplete(onComplete, { handled: false, ok: false, message: '', spoken: false });
@@ -553,8 +570,13 @@ export function initAtlasHomeConversation(deps = {}) {
   _deps = deps;
   _settings = loadVoiceSettings();
   if (!_settings.selected_voice) {
-    _settings.selected_voice = PREFERRED_VOICE;
+    _settings.selected_voice = _preferredVoice();
   }
+  window.addEventListener('atlas-user-settings-changed', () => {
+    _settings.selected_voice = _preferredVoice();
+    saveVoiceSettings(_settings);
+    _syncSettingsUI();
+  });
   saveVoiceSettings(_settings);
   _syncSettingsUI();
   _bindEvents();

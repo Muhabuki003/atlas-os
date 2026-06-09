@@ -1,28 +1,5 @@
 {
-  "entries": [
-    {
-      "id": "houseify",
-      "name": "Houseify",
-      "expected_revenue": 0,
-      "actual_revenue": 0,
-      "costs": 0,
-      "profit_estimate": 0,
-      "monetisation_strategy": "Agency SaaS subscriptions, per-listing premium features, and lead-generation partnerships.",
-      "notes": "Pre-revenue — validate with pilot agencies.",
-      "last_updated": "2026-06-06T00:00:00+00:00"
-    },
-    {
-      "id": "transportos",
-      "name": "TransportOS",
-      "expected_revenue": 0,
-      "actual_revenue": 0,
-      "costs": 0,
-      "profit_estimate": 0,
-      "monetisation_strategy": "Per-seat ops pricing, per-job AI assist tier, and design-partner contracts.",
-      "notes": "Pre-revenue — find one logistics operator for concierge trial.",
-      "last_updated": "2026-06-06T00:00:00+00:00"
-    }
-  ],
-  "notes": "Manual finance tracking only. Stripe connection coming later.",
+  "entries": [],
+  "notes": "Manual finance tracking only. Connect your own payment tools when ready.",
   "stripe_placeholder": true
 }

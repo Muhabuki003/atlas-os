@@ -2497,7 +2497,7 @@ export function openTasks(focusId) {
   _triggerEvents = null;
 
   const modal = document.createElement('div');
-  modal.className = 'modal';
+  modal.className = document.body.classList.contains('atlas-os') ? 'modal atlas-overlay-modal' : 'modal';
   modal.id = 'tasks-modal';
   modal.innerHTML = `
     <div class="modal-content tasks-modal-content">

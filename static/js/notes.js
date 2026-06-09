@@ -1103,10 +1103,11 @@ export function openPanel() {
   _firedDotDismissedAt = Date.now();
   try { localStorage.setItem(REMINDER_DISMISSED_AT_KEY, String(_firedDotDismissedAt)); } catch {}
 
+  const isAtlasOs = document.body.classList.contains('atlas-os');
   const container = document.getElementById('chat-container');
-  if (!container) return;
+  if (!isAtlasOs && !container) return;
 
-  document.body.classList.add('notes-view');
+  if (!isAtlasOs) document.body.classList.add('notes-view');
 
   // On mobile the notes panel takes the whole screen — auto-close the
   // sidebar so the panel isn't cropped underneath it.
@@ -1128,7 +1129,7 @@ export function openPanel() {
   // Create panel
   const pane = document.createElement('div');
   pane.id = 'notes-pane';
-  pane.className = 'notes-pane';
+  pane.className = isAtlasOs ? 'notes-pane atlas-overlay-tool' : 'notes-pane';
   pane.innerHTML = `
     <div class="notes-mobile-grabber" id="notes-mobile-grabber" aria-hidden="true"></div>
     <div class="notes-pane-header">
@@ -1180,7 +1181,7 @@ export function openPanel() {
   // Mount on body so Notes can behave like the other draggable windows. On
   // desktop it is immediately docked to the right by _restoreNotesSidebarDock.
   const backdrop = document.createElement('div');
-  backdrop.className = 'notes-pane-backdrop';
+  backdrop.className = isAtlasOs ? 'notes-pane-backdrop atlas-overlay-host' : 'notes-pane-backdrop';
   backdrop.id = 'notes-pane-backdrop';
   backdrop.addEventListener('click', (ev) => {
     if (ev.target === backdrop) closePanel('down');
@@ -5113,7 +5114,75 @@ async function openNote(noteId) {
   setTimeout(tryNext, 120);
 }
 
-const notesModule = { openPanel, closePanel, togglePanel, isPanelOpen, openNote, openNotes: openPanel, closeNotes: closePanel, isNotesOpen: isPanelOpen, refreshDueBadge };
+export async function voicePrepareNote(type = 'note', initialText = '') {
+  if (!_open) openPanel();
+  await _fetchNotes();
+  const body = document.querySelector('#notes-pane .notes-pane-body');
+  if (!body) return false;
+  let form = body.querySelector('.note-form-new');
+  if (!form) {
+    _editingId = '__new__';
+    form = _buildForm({ note_type: type, title: initialText || '' });
+    form.classList.add('note-form-new');
+    body.prepend(form);
+  } else {
+    const titleEl = form.querySelector('.note-form-title');
+    if (titleEl) titleEl.value = initialText || titleEl.value;
+    const noteBtn = form.querySelector('[data-type="note"]');
+    const todoBtn = form.querySelector('[data-type="todo"]');
+    if (type === 'todo' && todoBtn) todoBtn.click();
+    if (type === 'note' && noteBtn) noteBtn.click();
+  }
+  const titleEl = form.querySelector('.note-form-title');
+  if (titleEl) {
+    titleEl.focus();
+    titleEl.classList.add('notes-voice-fill');
+    setTimeout(() => titleEl.classList.remove('notes-voice-fill'), 1200);
+  }
+  return true;
+}
+
+export function voiceUpdateNoteDraft(text) {
+  const form = document.querySelector('#notes-pane .note-form-new');
+  const titleEl = form?.querySelector('.note-form-title');
+  if (titleEl) {
+    titleEl.value = text || '';
+    titleEl.classList.add('notes-voice-fill');
+    setTimeout(() => titleEl.classList.remove('notes-voice-fill'), 1200);
+  }
+}
+
+export async function voiceSaveNoteDraft() {
+  const form = document.querySelector('#notes-pane .note-form-new');
+  if (!form) return false;
+  const titleEl = form.querySelector('.note-form-title');
+  const title = (titleEl?.value || '').trim();
+  if (!title) return false;
+  const typeBtn = form.querySelector('.note-form-type-seg .active');
+  const noteType = typeBtn?.dataset?.type === 'todo' ? 'todo' : 'note';
+  try {
+    const saved = await _saveNote({ title, note_type: noteType, content: '', items: noteType === 'todo' ? [{ text: title, done: false }] : [] });
+    _editingId = null;
+    form.remove();
+    if (saved?.id) {
+      const idx = _notes.findIndex((n) => n.id === saved.id);
+      if (idx >= 0) _notes[idx] = saved;
+      else _notes.unshift(saved);
+    }
+    _renderNotes();
+    const card = document.querySelector(`.note-card[data-note-id="${saved?.id}"]`);
+    if (card) {
+      card.classList.add('note-card-flash');
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      setTimeout(() => card.classList.remove('note-card-flash'), 1600);
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+const notesModule = { openPanel, closePanel, togglePanel, isPanelOpen, openNote, openNotes: openPanel, closeNotes: closePanel, isNotesOpen: isPanelOpen, refreshDueBadge, voicePrepareNote, voiceUpdateNoteDraft, voiceSaveNoteDraft };
 export default notesModule;
 export { openPanel as openNotes, closePanel as closeNotes, isPanelOpen as isNotesOpen, openNote };
 window.notesModule = notesModule;

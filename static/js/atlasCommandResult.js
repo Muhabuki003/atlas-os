@@ -4,12 +4,16 @@ export function cmdUnhandled() {
   return { handled: false };
 }
 
-export function cmdHandled(ok, message, { spoken = false } = {}) {
+export function cmdHandled(ok, message, { spoken = false, uiAction = null, uiActions = null, uiActivity = null, speakFull = false } = {}) {
   return {
     handled: true,
     ok: !!ok,
     message: message || '',
     spoken: !!spoken,
+    speakFull: !!speakFull,
+    uiAction: uiAction || null,
+    uiActions: uiActions || null,
+    uiActivity: uiActivity || null,
   };
 }
 

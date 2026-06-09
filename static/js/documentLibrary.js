@@ -1593,7 +1593,7 @@ let _libraryArchivedView = false;   // Documents tab showing archived docs?
 
     // Create modal
     const modal = document.createElement('div');
-    modal.className = 'modal';
+    modal.className = document.body.classList.contains('atlas-os') ? 'modal atlas-overlay-modal' : 'modal';
     modal.id = 'doclib-modal';
     modal.innerHTML = `
       <div class="modal-content doclib-modal-content" style="width:min(640px, 92vw);max-height:85vh;background:var(--bg);">

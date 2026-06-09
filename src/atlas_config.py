@@ -36,6 +36,8 @@ _CONFIG_FILES = (
     "desktop_permissions.json",
     "briefing_settings.json",
     "council.json",
+    "goals.json",
+    "user_settings.json",
 )
 
 
@@ -489,12 +491,11 @@ def build_atlas_system_context() -> str:
         f"Reply style: {reply_style}",
         "Avoid long essays, generic AI waffle, overexplaining, and repeating context.",
         "",
-        f"## User: {profile.get('name', 'Aurelius')} ({address})",
+        f"## User: {profile.get('name', 'User')} ({address})",
         f"Role: {profile.get('role', '')}",
         f"Work style: {profile.get('work_style', '')}",
         f"Focus rule: {profile.get('focus_selection_rule', '')}",
         f"Dynamic focus ({focus.get('reason', 'unknown')}): {focus.get('label') or 'none'}",
-        f"Also known as: {profile.get('also_known_as', '')}",
         f"Skills: {', '.join(profile.get('skills', [])) if isinstance(profile.get('skills'), list) else ''}",
         f"Business preferences: {profile.get('business_preferences_text', '')}",
         f"Preferences: {profile.get('likes', '')}",

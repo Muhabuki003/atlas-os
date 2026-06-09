@@ -41,7 +41,7 @@ Example Cursor entry:
   "path": "%LOCALAPPDATA%\\Programs\\cursor",
   "exe": "Cursor.exe",
   "env_path_key": "ATLAS_CURSOR_PATH",
-  "enabled": true
+  "enabled": false
 }
 ```
 
@@ -52,8 +52,8 @@ Example Cursor entry:
 1. Edit `apps.json` paths for your machine, or set env overrides:
 
 ```powershell
-$env:ATLAS_CURSOR_PATH = "C:\Users\user\AppData\Local\Programs\cursor\Cursor.exe"
-$env:ATLAS_BRIDGE_TOKEN = "atlas-local-dev-token"
+$env:ATLAS_CURSOR_PATH = "%LOCALAPPDATA%\Programs\cursor\Cursor.exe"
+$env:ATLAS_BRIDGE_TOKEN = "change-this-token"
 ```
 
 2. In Atlas `data/atlas/desktop_permissions.json`:
@@ -62,7 +62,7 @@ $env:ATLAS_BRIDGE_TOKEN = "atlas-local-dev-token"
 {
   "desktop_commands_enabled": true,
   "bridge_url": "http://host.docker.internal:8765",
-  "bridge_token": "atlas-local-dev-token"
+  "bridge_token": "change-this-token"
 }
 ```
 
@@ -71,7 +71,7 @@ $env:ATLAS_BRIDGE_TOKEN = "atlas-local-dev-token"
 ## Run
 
 ```powershell
-$env:ATLAS_BRIDGE_TOKEN = "atlas-local-dev-token"
+$env:ATLAS_BRIDGE_TOKEN = "change-this-token"
 python desktop_bridge.py
 ```
 
@@ -90,7 +90,7 @@ Bridge listens on `http://127.0.0.1:8765`. Resolved apps are logged at startup.
 ```json
 { "command": "open_app", "args": { "app": "cursor" } }
 { "command": "open_url", "args": { "url": "https://www.youtube.com" } }
-{ "command": "open_project_in_cursor", "args": { "path": "C:\\AtlasWorkspace\\Projects\\Houseify" } }
+{ "command": "open_project_in_cursor", "args": { "path": "C:\\AtlasWorkspace\\Projects\\MyProject" } }
 ```
 
 Failed launches return `attempted_paths` for diagnostics.

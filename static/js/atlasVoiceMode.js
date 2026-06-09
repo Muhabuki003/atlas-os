@@ -1,6 +1,7 @@
 // Atlas OS — Voice Assistant V5 (passive wake + phrase activation)
 
 import { prepareSpeechText } from './atlasVoiceTts.js';
+import atlasPersonality from './atlasPersonality.js';
 import { normalizeSubmitResult, cmdDebug } from './atlasCommandResult.js';
 import {
   ACTIVATION_PHRASES,
@@ -451,7 +452,17 @@ function _truncateForVoice(text, maxSentences = 4) {
 }
 
 function _pickDefaultVoice(voices) {
+  const preferred = window.AtlasUserSettings?.getPreferredVoiceName?.();
+  if (preferred) {
+    const exact = voices.find(v => v.name === preferred || v.name.includes(preferred));
+    if (exact) return exact.name;
+  }
   const en = voices.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+  const settings = window.AtlasUserSettings?.getAtlasUserSettings?.();
+  if (settings?.assistant_identity === 'Atlasia') {
+    const ukFemale = en.find(v => v.name.includes('Google UK English Female'));
+    if (ukFemale) return ukFemale.name;
+  }
   const ukMale = en.find(v => v.name.includes('Google UK English Male'));
   if (ukMale) return ukMale.name;
   const prefer = [
@@ -521,7 +532,7 @@ async function _onStandbyDetected() {
   _homeDeps?.onDeactivate?.();
   _setMicPaused(true);
   try {
-    await speakText('Standing by sir.', { short: false });
+    await speakText(atlasPersonality.getStandby(), { short: false });
   } finally {
     _wakeHandling = false;
     _setMicPaused(false);
@@ -605,7 +616,7 @@ export function speakText(text, { onEnd, short = true, style } = {}) {
       const match = voices.find(v => v.name === _selectedVoice);
       if (match) utt.voice = match;
     }
-    utt.rate = _ttsRate;
+    utt.rate = window.AtlasUserSettings?.getSpeechRate?.() || _ttsRate;
     utt.pitch = _ttsPitch;
     _setMicPaused(true);
     _setStatus('speaking');
@@ -876,7 +887,7 @@ function _finishCommandCapture() {
   const raw = (_el('atlas-voice-transcript')?.value || '').trim();
   if (!raw) {
     if (_conversationActive) {
-      speakText('I did not catch that, sir.', { onEnd: () => _startFollowUpOrWake() });
+      speakText(atlasPersonality.appendAddress('I did not catch that'), { onEnd: () => _startFollowUpOrWake() });
     } else if (_passiveWakeActive) {
       _startWakeListening();
     } else {
@@ -920,7 +931,8 @@ async function _onWakeDetected(matchedPhrase = '') {
     _speakReplies = true;
     _homeDeps?.saveSettings?.({ conversation_mode_enabled: true, speak_replies: true });
 
-    await speakText('Online sir.', { short: false });
+    const greeting = window.AtlasUserSettings?.getActivationGreeting?.() || atlasPersonality.getGreeting();
+    await speakText(greeting, { short: false });
     const started = _startCommandCapture();
     if (!started) {
       _showRecognitionDebug('command_listen_failed', 'Could not start command listening after activation.');
@@ -1465,7 +1477,7 @@ function _handleAssistantResponse(text, { failed = false } = {}) {
   _debug('assistant response', { failed, len: (text || '').length });
 
   if (failed || !(text || '').trim()) {
-    speakText("Sorry sir, I couldn't complete that request.", {
+    speakText(atlasPersonality.getError("I couldn't complete that request"), {
       onEnd: () => _returnToWakeStandby(),
     });
     return;
@@ -1807,7 +1819,7 @@ function _bindEvents() {
   });
 
   _el('atlas-voice-tts-test')?.addEventListener('click', () => {
-    speakText('Good evening, Sir. Atlas is online and ready.', { short: false });
+    speakText(atlasPersonality.getGreeting(), { short: false });
   });
 
   _el('atlas-voice-wake-mode')?.addEventListener('change', (e) => {

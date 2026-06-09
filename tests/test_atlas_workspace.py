@@ -38,53 +38,53 @@ def test_detect_stack_node_project(tmp_path):
 def test_discover_immediate_children_only(tmp_path):
     ws = tmp_path / "workspace"
     ws.mkdir()
-    (ws / "houseify").mkdir()
-    (ws / "transportos").mkdir()
+    (ws / "sampleapp").mkdir()
+    (ws / "demoapp").mkdir()
     (ws / "notes.txt").write_text("x", encoding="utf-8")
-    (ws / "houseify" / "nested").mkdir()
+    (ws / "sampleapp" / "nested").mkdir()
 
     found = discover_child_projects(ws)
     names = {p["name"] for p in found}
-    assert names == {"houseify", "transportos"}
+    assert names == {"sampleapp", "demoapp"}
 
 
 def test_merge_preserves_manual_description():
     existing = {
-        "id": "houseify",
-        "name": "Houseify",
+        "id": "sampleapp",
+        "name": "SampleApp",
         "description": "Custom manual description",
         "priority": "high",
         "source": "manual",
     }
     candidate = {
-        "id": "houseify",
-        "name": "Houseify",
-        "description": "Discovered project at Houseify",
+        "id": "sampleapp",
+        "name": "SampleApp",
+        "description": "Discovered project at SampleApp",
         "priority": "medium",
         "source": "workspace_scan",
-        "path": "/workspace/Projects/houseify",
+        "path": "/workspace/Projects/sampleapp",
     }
     merged = merge_discovered(existing, candidate)
     assert merged["description"] == "Custom manual description"
     assert merged["priority"] == "high"
-    assert merged["path"] == "/workspace/Projects/houseify"
+    assert merged["path"] == "/workspace/Projects/sampleapp"
 
 
 def test_legacy_windows_path_detected():
-    assert is_legacy_windows_path(r"C:\dev\houseify")
-    assert not is_legacy_windows_path("/workspace/Projects/houseify")
+    assert is_legacy_windows_path(r"C:\dev\sampleapp")
+    assert not is_legacy_windows_path("/workspace/Projects/sampleapp")
 
 
 def test_display_path_maps_container_to_host(atlas_mount):
-    container = str(atlas_mount / "Projects" / "houseify").replace("\\", "/")
+    container = str(atlas_mount / "Projects" / "sampleapp").replace("\\", "/")
     ws = {"workspace_container_root": str(atlas_mount).replace("\\", "/"), "workspace_host_root_hint": r"C:\AtlasWorkspace"}
     display = to_display_path(container, ws)
     assert "AtlasWorkspace" in display
-    assert "houseify" in display
+    assert "sampleapp" in display
 
 
 def test_scan_workspace_updates_projects(atlas_data_dir, atlas_mount):
-    house = atlas_mount / "Projects" / "houseify"
+    house = atlas_mount / "Projects" / "sampleapp"
     house.mkdir()
     (house / "package.json").write_text("{}", encoding="utf-8")
 
@@ -92,19 +92,19 @@ def test_scan_workspace_updates_projects(atlas_data_dir, atlas_mount):
 
     result = scan_workspace(atlas_data_dir)
     assert result["ok"] is True
-    assert "houseify" in result["discovered"]
+    assert "sampleapp" in result["discovered"]
     assert result["discovered_count"] == 1
     projects = atlas_config.load_projects()
-    houseify = next(p for p in projects if p.get("id") == "houseify")
-    assert houseify["path_status"] == "valid"
-    assert "houseify" in houseify["path"]
+    sample = next(p for p in projects if p.get("id") == "sampleapp")
+    assert sample["path_status"] == "valid"
+    assert "sampleapp" in sample["path"]
 
 
 def test_scan_auto_index_on_scan(atlas_data_dir, atlas_mount):
-    house = atlas_mount / "Projects" / "houseify"
+    house = atlas_mount / "Projects" / "sampleapp"
     house.mkdir()
     (house / "package.json").write_text("{}", encoding="utf-8")
-    (house / "README.md").write_text("# Houseify", encoding="utf-8")
+    (house / "README.md").write_text("# SampleApp", encoding="utf-8")
 
     save_workspace(
         atlas_data_dir,
@@ -116,6 +116,6 @@ def test_scan_auto_index_on_scan(atlas_data_dir, atlas_mount):
     assert result["discovered_count"] == 1
     assert result["indexed_count"] == 1
     projects = atlas_config.load_projects()
-    houseify = next(p for p in projects if p.get("id") == "houseify")
-    assert houseify.get("indexed") is True
-    assert houseify.get("file_count", 0) >= 1
+    sample = next(p for p in projects if p.get("id") == "sampleapp")
+    assert sample.get("indexed") is True
+    assert sample.get("file_count", 0) >= 1

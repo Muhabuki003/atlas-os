@@ -42,7 +42,7 @@ def test_save_agent_report_markdown(atlas_mount):
     path = save_agent_report_markdown(
         "developer",
         "developer_project_review",
-        "Developer Project Review: Houseify",
+        "Developer Project Review: SampleApp",
         "# Review\n\nTest content",
     )
     assert path is not None

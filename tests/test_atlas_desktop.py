@@ -37,12 +37,12 @@ def test_desktop_status_shape():
 
 
 def test_container_to_host_path_translation():
-    host, err = container_to_host_path("/workspace/Projects/Houseify")
+    host, err = container_to_host_path("/workspace/Projects/SampleApp")
     assert err is None
     assert host
     assert "AtlasWorkspace" in host
     assert "Projects" in host
-    assert "Houseify" in host
+    assert "SampleApp" in host
 
 
 def test_rejects_path_outside_workspace():

@@ -1,121 +1,132 @@
-# Contributing to Odysseus
+# Contributing to Atlas OS Community
 
-Thanks for helping. The project is moving quickly, so the best contributions are focused, easy to review, and easy to test.
+Thanks for helping improve Atlas OS Community. Focused, testable contributions are easiest to review and merge.
+
+> **Upstream:** This project builds on the open-source [Odysseus](https://github.com/pewdiepie-archdaemon/odysseus) workspace (MIT License). Respect upstream licensing and attribution when contributing.
 
 ## Branch model
 
-Odysseus has two branches:
+- **`main`** — default branch; PRs target **`main`** until a dedicated `dev` branch is created.
+- When a `dev` branch exists, open PRs against **`dev`** instead. The maintainer merges stable work to `main` at releases.
 
-- **`dev`** — where all PRs land. Things can be in flux here; the merge button gets used freely.
-- **`main`** — what users run. Curated and tested by the maintainer. Fast-forwarded to a stable `dev` commit at each release.
+Check the base branch dropdown when opening a PR.
 
-**Open your PR against `dev`, not `main`.** The GitHub "base" dropdown defaults to `dev`. If you opened a PR against `main` by accident, click "Edit" on the PR and change the base — no rebase needed.
+## Before you start
 
-End-users cloning the repo will land on `dev` by default. To run the curated/stable version: `git checkout main` after clone.
-
-## Before You Start
-
-- Search existing issues and pull requests before opening a new one.
-- Prefer one bug fix or feature per pull request.
-- Avoid broad rewrites, formatting-only changes, or moving many files unless the issue is specifically about structure.
-- If you want to work on a large feature, open an issue first and describe the approach.
+- Search existing [issues](../../issues) and [pull requests](../../pulls) before opening a new one.
+- Prefer **one bug fix or feature per PR**.
+- Avoid broad rewrites, formatting-only diffs, or unrelated refactors mixed with behaviour changes.
+- For large features, open an issue first and describe your approach.
 
 ## Setup
 
-Docker is the recommended path for normal testing:
+Docker is the recommended path:
 
-```bash
-git clone https://github.com/pewdiepie-archdaemon/odysseus.git
-cd odysseus
-cp .env.example .env
+```powershell
+git clone https://github.com/YOUR_ORG/atlas-os-community.git
+cd atlas-os-community
+copy .env.example .env
+mkdir C:\AtlasWorkspace\Projects
 docker compose up -d --build
 ```
 
-Manual development uses Python 3.11+:
+Manual development (Python 3.11+):
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m uvicorn app:app --host 0.0.0.0 --port 7000
+python -m uvicorn app:app --host 127.0.0.1 --port 7000
 ```
 
-Windows is not actively tested. Docker on Linux or a Linux/macOS manual install is the safer path for now.
+See [INSTALL.md](INSTALL.md) for full Windows setup.
 
-## Running Checks
+## Running checks
 
 Run the smallest relevant checks for your change:
 
-```bash
-python -m pytest
-python -m py_compile app.py routes/*.py src/*.py
+```powershell
+python -m pytest tests -q
+python -m compileall -q app.py routes src tests
 node --check static/js/<file-you-changed>.js
 ```
 
 For Docker-related changes:
 
-```bash
+```powershell
 docker compose config
 docker compose up -d --build
 docker compose logs --tail=120 odysseus
 ```
 
-Mention what you ran in the pull request description. If you could not run a check, say so.
+Mention what you ran in the PR description. If you could not run a check, say why.
 
-## Pull Requests
+## Pull requests
 
-Good pull requests usually include:
+Good PRs include:
 
-- A short explanation of the bug or feature.
-- The files or areas changed.
-- Manual test steps or automated test results from running the actual app, not just the test suite.
-- Screenshots or short recordings for UI changes.
-- Links to related issues, for example `Fixes #123`.
+- A short explanation of the bug or feature
+- Files or areas changed
+- Manual test steps from running the **actual app**, not only unit tests
+- Screenshots or short recordings for UI changes
+- A linked issue reference, e.g. `Fixes #123`
 
-Please keep PRs small. Large PRs that mix unrelated cleanup, formatting, refactors, and behavior changes are much harder to review.
+Keep PRs **focused**. Large PRs that mix cleanup, formatting, refactors, and behaviour changes are hard to review.
 
-> **Auto-generated PRs.** If you are running an LLM agent (Devin, Cursor, OpenHands, Claude Code, etc.) against this repo: please open an issue describing the problem first instead of opening a PR directly. Bulk agent-generated PRs that don't match the project's visual style or contribution format will be closed without review, even when the underlying fix is correct.
+### LLM-generated PRs
 
-## Style and visual changes
+If you use an AI coding agent (Cursor, Claude Code, Codex, etc.):
 
-Odysseus has an intentional visual style. PRs that ignore it will be closed without merge, no matter how correct the underlying code is.
+- Open an issue describing the problem **before** submitting a bulk PR
+- Describe clearly what the agent changed and why
+- Review generated code carefully — do not submit unverified diffs
+- Match Atlas visual style (see below); style mismatches may be closed even if the fix is technically correct
 
-Before submitting any change that affects what the app looks like — buttons, icons, fonts, colors, spacing, layout, CSS, HTML, SVG, or any `static/js/` module that draws to the DOM — please:
+## Atlas visual style
 
-1. **Run the app locally** and view the change in a browser. Type-checks and unit tests are not enough.
-2. **Attach a screenshot or short clip** of the change in the running app. Add a mobile screenshot too if the change affects mobile.
-3. **Match the existing visual language.** Specifically:
-   - Reuse existing CSS variables (`--red`, `--fg`, `--bg`, `--card`, `--border`, …). Do not introduce new color values, font sizes, or spacing units.
-   - Reuse existing button, input, card, and border classes. Don't invent parallel styling for similar widgets.
-   - **No Unicode emoji in UI or code.** Use inline SVG (matching the monochrome icon style already in `static/index.html`) or plain text.
-   - Monospaced font (`Fira Code`) for primary UI text. Don't override.
-   - Dark theme is the default; any light-mode work goes through the existing theme system, not hard-coded.
-4. **Don't add parallel components.** If a similar widget already exists in the app, extend it instead of writing a new one.
+Atlas OS Community has an intentional look. PRs that ignore it may be closed without merge.
 
-If you are unsure whether a change is "visual," it is. Default to attaching a screenshot.
+Before submitting UI changes (CSS, HTML, SVG, or `static/js/` modules that draw to the DOM):
 
-## Issue Reports
+1. **Run the app locally** and verify in a browser.
+2. **Attach screenshots** (and mobile if relevant).
+3. **Preserve the Atlas visual language:**
+   - **Blueprint UI** — structured panels, status bars, mission-control surfaces
+   - **Glassmorphism** — translucent cards and overlays using existing patterns
+   - **Neon theme variables** — reuse CSS variables from `static/themes/atlas-themes.css`; do not hard-code new palette values
+   - **Voice-first workflow** — do not break Home voice navigation or global HUD patterns
+   - **Bottom dock / global HUD** — extend existing chrome; do not invent parallel navigation
+4. Reuse existing button, input, card, and border classes.
+5. **No Unicode emoji in UI or code** — use inline SVG or plain text.
+6. **Do not add parallel components** when a similar widget already exists.
+
+If unsure whether a change is visual, treat it as visual and attach a screenshot.
+
+## What not to commit
+
+- `.env`, API keys, tokens, or webhook secrets
+- `data/`, `logs/`, databases, uploads, backups, or runtime state
+- Personal names, private project names, finance data, calendar entries, or real agent reports
+- Personal Windows paths (`C:\Users\...`) except documented generic examples
+
+Use `.env.example` for placeholders only.
+
+## Issue reports
 
 For bugs, include:
 
-- Install method: Docker, manual Python, WSL, etc.
-- OS, browser, and device if relevant.
-- Exact steps to reproduce.
-- Expected behavior and actual behavior.
-- Logs, screenshots, or terminal output.
+- Install method (Docker, manual Python, etc.)
+- OS and browser
+- Exact steps to reproduce
+- Expected vs actual behaviour
+- Logs or screenshots (**redact secrets first**)
 
-For model-serving issues, include:
+For model-serving issues, include backend (Ollama, vLLM, OpenAI, etc.), model name, and relevant Cookbook or server logs.
 
-- Backend: Ollama, vLLM, SGLang, llama.cpp, LM Studio, etc.
-- Model name.
-- GPU/CPU and operating system.
-- Cookbook task logs or server logs.
-
-Issues with only "help", "does not work", or a screenshot without context may be closed as not actionable.
+Issues with only "help" or "does not work" and no reproduction steps may be closed as not actionable.
 
 ## Security
 
-Do not post secrets, API keys, private logs, personal documents, or public IPs in issues or pull requests.
+Do not post secrets, API keys, private logs, or personal documents in issues or PRs.
 
-For security reports, follow [SECURITY.md](SECURITY.md).
-
+For vulnerability reports, follow [SECURITY.md](SECURITY.md).

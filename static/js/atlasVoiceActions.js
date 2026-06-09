@@ -2,6 +2,11 @@
 
 import AtlasVoiceContext from './atlasVoiceContext.js';
 import atlasVoiceNavigation from './atlasVoiceNavigation.js';
+import atlasOverlayTools from './atlasOverlayTools.js';
+import atlasCalendarVoice from './atlasCalendarVoice.js';
+import atlasNotesVoice from './atlasNotesVoice.js';
+import atlasPersonalisationVoice from './atlasPersonalisationVoice.js';
+import atlasPersonality from './atlasPersonality.js';
 import { cmdHandled, cmdUnhandled } from './atlasCommandResult.js';
 
 const AGENT_ALIASES = {
@@ -89,11 +94,30 @@ function _resolveAgent(query) {
   return null;
 }
 
+const OVERLAY_CLOSE = /^(?:close|exit|dismiss)\s+(?:the\s+)?(?:notes?|library|cook\s*book|calendar|brain|memory|tasks?)$/;
+
+function _parseCloseOverlay(norm) {
+  if (norm === 'close notes' || norm === 'close note') return 'notes';
+  if (norm === 'close library') return 'library';
+  if (norm === 'close cookbook' || norm === 'close cook book') return 'cookbook';
+  if (norm === 'close calendar') return 'calendar';
+  if (norm === 'close brain' || norm === 'close memory') return 'brain';
+  if (norm === 'close tasks' || norm === 'close task') return 'tasks';
+  return null;
+}
+
 function _isClosePhrase(norm) {
   return /^(?:close(?:\s+(?:it|report|agent|project|hq|modal))?|exit|dismiss|back)$/.test(norm)
     || norm === 'close project hq'
     || norm === 'close agent'
-    || norm === 'close report';
+    || norm === 'close report'
+    || OVERLAY_CLOSE.test(norm)
+    || !!_parseCloseOverlay(norm);
+}
+
+function _isCloseAgentPhrase(norm) {
+  return /^(?:close|exit|dismiss)(?:\s+(?:this\s+)?agent)$/.test(norm)
+    || /^close\s+(?:research|business|architect|developer|marketing)\s+agent$/.test(norm);
 }
 
 function _isFinishPhrase(norm) {
@@ -135,13 +159,15 @@ export function parseVoiceAction(transcript, context = AtlasVoiceContext.get()) 
   }
 
   if (_capture?.mode === 'message_body' && !_isClosePhrase(norm) && !_isFinishPhrase(norm)) {
+    const chunk = _stripPrefixes(raw);
+    if (!chunk) return { handled: false };
     return {
       handled: true,
       action: 'message',
       objectType: 'agent',
       objectName: _capture.agentId,
       confidence: 0.9,
-      payload: { message: raw.trim(), append: true },
+      payload: { message: chunk, append: true },
     };
   }
 
@@ -156,6 +182,13 @@ export function parseVoiceAction(transcript, context = AtlasVoiceContext.get()) 
     };
   }
 
+  const closeOverlay = _parseCloseOverlay(norm);
+  if (closeOverlay) {
+    return { handled: true, action: 'close_overlay', objectType: 'overlay', objectName: closeOverlay, confidence: 0.92, payload: { tool: closeOverlay } };
+  }
+  if (_isCloseAgentPhrase(norm)) {
+    return { handled: true, action: 'close_agent', objectType: 'agent', confidence: 0.9, payload: {} };
+  }
   if (_isClosePhrase(norm)) {
     return { handled: true, action: 'close', objectType: 'modal', confidence: 0.9, payload: {} };
   }
@@ -271,6 +304,9 @@ export function parseVoiceAction(transcript, context = AtlasVoiceContext.get()) 
   if (/^archive(?:\s+report)?$/.test(norm)) {
     return { handled: true, action: 'archive', objectType: 'report', confidence: 0.9, payload: {} };
   }
+  if (/^read(?:\s+the)?\s+report(?:\s+aloud)?$/.test(norm) || norm === 'read it aloud' || norm === 'read it') {
+    return { handled: true, action: 'read_report', objectType: 'report', confidence: 0.9, payload: {} };
+  }
   if (/^summar(?:y|ise)(?:\s+report)?$/.test(norm)) {
     return { handled: true, action: 'summarise', objectType: 'report', confidence: 0.88, payload: {} };
   }
@@ -330,47 +366,71 @@ async function _executeParsed(parsed) {
 
   if (parsed.action === 'cancel_message') {
     clearMessageCapture();
-    return cmdHandled(true, 'Message cancelled.');
+    uiAgents?.exitMessageCapture?.();
+    return cmdHandled(true, 'Message cancelled.', {
+      uiAction: { type: 'exit_message_capture', payload: {} },
+      uiActivity: 'Done: Message cancelled',
+    });
   }
 
   if (parsed.action === 'finish_message') {
-    if (!_capture?.message) return cmdHandled(false, 'No message to send yet.');
-    const agentId = _capture.agentId || ctx.currentAgentId;
-    if (!agentId) return cmdHandled(false, 'No agent selected.');
+    const agentId = _capture?.agentId || ctx.currentAgentId;
+    if (!agentId) return cmdHandled(false, 'No agent selected.', { uiActivity: 'Error: No agent selected' });
+    const msg = _capture?.message || document.getElementById('atlas-agent-message-input')?.value?.trim();
+    if (!msg) return cmdHandled(false, 'No message to send yet.', { uiActivity: 'Error: No message' });
+    uiAgents?.updateAgentMessageDraft?.(msg, agentId);
+    window.AtlasVoiceUi?.setCommandActivity?.('Generating: Research report', 'executing');
     const res = await uiAgents?.sendAgentMessage?.(
       agentId,
-      _capture.message,
-      _capture.projectId || ctx.currentProjectId,
-      _capture.reportType || AGENT_DEFAULT_REPORT[agentId],
+      msg,
+      _capture?.projectId || ctx.currentProjectId,
+      _capture?.reportType || AGENT_DEFAULT_REPORT[agentId],
     );
     clearMessageCapture();
-    return cmdHandled(!!res?.ok, res?.message || (res?.ok ? 'Report generated.' : 'Failed to send message.'));
+    const short = res?.ok ? 'Research report ready.' : (res?.message || 'Failed to send message.');
+    return cmdHandled(!!res?.ok, short, {
+      uiActivity: res?.ok ? 'Done: Research report ready' : 'Error: Send failed',
+      uiActions: res?.ok && res?.report ? [
+        { type: 'refresh_agent', payload: { agentId } },
+        { type: 'open_report', payload: { reportId: res.report.id } },
+        { type: 'scroll_report_top', payload: {} },
+      ] : [{ type: 'refresh_agent', payload: { agentId } }],
+    });
   }
 
   if (parsed.action === 'message') {
-    const agentId = parsed.objectName || ctx.currentAgentId || _resolveAgent(parsed.objectName);
-    if (!agentId) return cmdHandled(false, 'Which agent, sir?');
+    const agentId = _resolveAgent(parsed.objectName) || parsed.objectName || ctx.currentAgentId;
+    if (!agentId) return cmdHandled(false, atlasPersonality.formatQuestion('Which agent'), { uiActivity: 'Error: No agent' });
 
     if (parsed.payload?.direct || (parsed.payload?.message && !parsed.payload?.append)) {
       const msg = parsed.payload.message;
-      const res = await uiAgents?.sendAgentMessage?.(
-        agentId,
-        msg,
-        ctx.currentProjectId,
-        AGENT_DEFAULT_REPORT[agentId],
-      );
+      uiAgents?.updateAgentMessageDraft?.(msg, agentId);
+      window.AtlasVoiceUi?.setCommandActivity?.('Generating: Research report', 'executing');
+      const res = await uiAgents?.sendAgentMessage?.(agentId, msg, ctx.currentProjectId, AGENT_DEFAULT_REPORT[agentId]);
       clearMessageCapture();
-      return cmdHandled(!!res?.ok, res?.message || (res?.ok ? 'Generating report.' : 'Message failed.'));
+      const short = res?.ok ? 'Research report ready.' : (res?.message || 'Message failed.');
+      return cmdHandled(!!res?.ok, short, {
+        uiActivity: res?.ok ? 'Generating: Research report' : 'Error: Message failed',
+        uiActions: res?.ok && res?.report ? [
+          { type: 'open_agent', payload: { agentId } },
+          { type: 'refresh_agent', payload: { agentId } },
+          { type: 'open_report', payload: { reportId: res.report.id } },
+          { type: 'scroll_report_top', payload: {} },
+        ] : [{ type: 'open_agent', payload: { agentId } }],
+      });
     }
 
     if (parsed.payload?.append) {
+      _capture = _capture || { mode: 'message_body', agentId, message: '', projectId: ctx.currentProjectId, reportType: AGENT_DEFAULT_REPORT[agentId] };
       _capture.message = [_capture.message, parsed.payload.message].filter(Boolean).join(' ').trim();
-      return cmdHandled(true, 'Message captured. Say finish message to send, or cancel message.');
+      uiAgents?.updateAgentMessageDraft?.(_capture.message, agentId);
+      return cmdHandled(true, 'Captured.', {
+        uiAction: { type: 'update_agent_message', payload: { text: _capture.message, agentId } },
+        uiActivity: 'Executing: Capture message',
+      });
     }
 
     if (parsed.payload?.startCapture || !parsed.payload?.message) {
-      await uiAgents?.openAgent?.(agentId);
-      uiAgents?.focusAgentMessage?.(agentId);
       _capture = {
         mode: 'message_body',
         agentId,
@@ -378,15 +438,52 @@ async function _executeParsed(parsed) {
         projectId: ctx.currentProjectId || null,
         reportType: AGENT_DEFAULT_REPORT[agentId],
       };
-      const name = ctx.currentAgentName || agentId;
-      return cmdHandled(true, `What should I send to ${name}?`);
+      const agentRes = await fetch('/api/atlas/agents', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => ({}));
+      const agent = (agentRes.agents || []).find((a) => a.id === agentId);
+      const name = agent?.name || ctx.currentAgentName || agentId;
+      return cmdHandled(true, `What should I send to ${name}?`, {
+        uiActions: [
+          { type: 'open_agent', payload: { agentId } },
+          { type: 'focus_agent_message', payload: { agentId, label: name } },
+        ],
+        uiActivity: `Executing: Message ${name}`,
+      });
     }
   }
 
+  if (parsed.action === 'close_overlay') {
+    const tool = parsed.payload?.tool || parsed.objectName;
+    const closed = await atlasOverlayTools.closeOverlayTool?.(tool);
+    return cmdHandled(!!closed, closed ? 'Closed.' : 'Nothing to close.', {
+      uiAction: closed ? { type: 'close_overlay', payload: { tool } } : null,
+      uiActivity: closed ? 'Done: Closed' : 'Error: Nothing to close',
+    });
+  }
+
+  if (parsed.action === 'close_agent') {
+    const reportModal = document.getElementById('atlas-report-modal');
+    if (reportModal && !reportModal.classList.contains('hidden')) {
+      await uiAgents?.closeActiveModal?.();
+      return cmdHandled(true, 'Closed.', {
+        uiAction: { type: 'close_modal', payload: {} },
+        uiActivity: 'Done: Closed report',
+      });
+    }
+    const agentModal = document.getElementById('atlas-agent-office-modal');
+    const had = agentModal && !agentModal.classList.contains('hidden');
+    if (had) await uiAgents?.closeActiveModal?.();
+    return cmdHandled(!!had, had ? 'Closed.' : 'No agent open.', {
+      uiAction: had ? { type: 'close_modal', payload: {} } : null,
+      uiActivity: had ? 'Done: Closed agent' : 'Error: No agent open',
+    });
+  }
+
   if (parsed.action === 'close') {
-    const closed = await uiAgents?.closeActiveModal?.();
-    if (closed) return cmdHandled(true, 'Closed.');
-    return cmdHandled(false, 'Nothing to close.');
+    const had = uiAgents?.hasOpenModal?.() ?? atlasOverlayTools.anyOverlayOpen?.();
+    return cmdHandled(had, had ? 'Closed.' : 'Nothing to close.', {
+      uiAction: had ? { type: 'close_modal', payload: {} } : null,
+      uiActivity: had ? 'Executing: Close' : 'Error: Nothing to close',
+    });
   }
 
   if (parsed.action === 'scroll') {
@@ -395,7 +492,18 @@ async function _executeParsed(parsed) {
   }
 
   if (parsed.action === 'open' && parsed.objectType === 'route') {
-    return atlasVoiceNavigation.tryHandleNavigation(`move to ${parsed.objectName}`);
+    const key = _norm(parsed.objectName).replace(/\s+/g, ' ').replace('cook book', 'cookbook').replace(/^memory$/, 'brain');
+    if (atlasOverlayTools.TOOL_IDS.includes(key)) {
+      await atlasOverlayTools.openOverlayTool(key);
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      return cmdHandled(true, `Opening ${label}.`, {
+        uiAction: { type: 'open_overlay', payload: { tool: key } },
+        uiActivity: `Done: Opening ${label}`,
+      });
+    }
+    const nav = await atlasVoiceNavigation.tryHandleNavigation(`move to ${parsed.objectName}`);
+    if (nav?.handled) return nav;
+    return nav;
   }
 
   if (parsed.objectType === 'project') {
@@ -406,76 +514,146 @@ async function _executeParsed(parsed) {
 
     if (parsed.payload?.prompt && !proj) {
       _awaiting = 'project_name';
-      return cmdHandled(true, 'Which project, sir?');
+      return cmdHandled(true, atlasPersonality.formatQuestion('Which project'));
     }
     if (!proj) return cmdHandled(false, 'Project not found.');
 
     if (parsed.action === 'select') {
-      await uiProjects?.selectProject?.(proj.id);
-      return cmdHandled(true, `${proj.name} selected.`);
+      return cmdHandled(true, `${proj.name} selected.`, {
+        uiActions: [
+          { type: 'navigate', payload: { route: 'projects' } },
+          { type: 'open_project', payload: { projectId: proj.id } },
+        ],
+        uiActivity: `Done: ${proj.name} selected`,
+      });
     }
     if (parsed.action === 'open') {
-      await uiProjects?.selectProject?.(proj.id);
-      if (parsed.payload?.openHq !== false) await uiProjects?.openProjectHQ?.(proj.id);
-      return cmdHandled(true, `Opening ${proj.name}.`);
+      return cmdHandled(true, `Opening ${proj.name}.`, {
+        uiActions: [
+          { type: 'navigate', payload: { route: 'projects' } },
+          { type: 'open_project', payload: { projectId: proj.id } },
+          { type: 'open_project_hq', payload: { projectId: proj.id } },
+        ],
+        uiActivity: `Done: Opening ${proj.name}`,
+      });
     }
     if (parsed.action === 'deep_index') {
       const res = await fetch(`/api/atlas/projects/${proj.id}/deep-index`, { method: 'POST', credentials: 'same-origin' }).then((r) => r.json());
-      return cmdHandled(!!res.ok, res.message || `Deep indexing ${proj.name}.`);
+      return cmdHandled(!!res.ok, res.message || `Deep indexing ${proj.name}.`, {
+        uiAction: { type: 'open_project', payload: { projectId: proj.id } },
+        uiActivity: `Done: Deep index ${proj.name}`,
+      });
     }
     if (parsed.action === 'generate') {
       const path = parsed.payload?.kind === 'launch_plan'
         ? `/api/atlas/projects/${proj.id}/create-launch-plan`
         : `/api/atlas/projects/${proj.id}/generate-cursor-prompt`;
+      const genLabel = parsed.payload?.kind === 'launch_plan' ? 'Launch plan' : 'Cursor prompt';
+      window.AtlasVoiceUi?.setCommandActivity?.(`Generating: ${genLabel}`, 'executing');
       const res = await fetch(path, { method: 'POST', credentials: 'same-origin' }).then((r) => r.json());
-      return cmdHandled(!!res.ok, res.message || 'Request sent.');
+      const short = parsed.payload?.kind === 'launch_plan' ? 'Launch plan ready.' : 'Cursor prompt generated.';
+      const actions = [
+        { type: 'navigate', payload: { route: 'projects' } },
+        { type: 'open_project', payload: { projectId: proj.id } },
+      ];
+      if (res?.ok && res?.report?.id) {
+        actions.push(
+          { type: 'open_report', payload: { reportId: res.report.id } },
+          { type: 'scroll_report_top', payload: {} },
+        );
+      }
+      return cmdHandled(!!res.ok, res.ok ? short : (res.message || 'Request failed.'), {
+        uiActions: actions,
+        uiActivity: res.ok ? `Done: ${short}` : 'Error: Generate failed',
+      });
     }
     if (parsed.action === 'review') {
-      await uiProjects?.selectProject?.(proj.id);
       const res = await fetch(`/api/atlas/projects/${proj.id}/council-review`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       }).then((r) => r.json());
-      return cmdHandled(!!res.ok, res.message || 'Council review started.');
+      const actions = [
+        { type: 'navigate', payload: { route: 'projects' } },
+        { type: 'open_project', payload: { projectId: proj.id } },
+      ];
+      if (res?.ok && res?.report?.id) {
+        actions.push({ type: 'open_report', payload: { reportId: res.report.id } });
+      }
+      return cmdHandled(!!res.ok, res.ok ? 'Council review started.' : (res.message || 'Council review failed.'), {
+        uiActions: actions,
+        uiActivity: res.ok ? 'Done: Council review started' : 'Error: Council review failed',
+      });
     }
   }
 
   if (parsed.objectType === 'agent') {
     const agentId = _resolveAgent(parsed.objectName) || parsed.objectName;
-    if (!agentId) return cmdHandled(false, 'Agent not found.');
-    await uiAgents?.openAgent?.(agentId);
+    if (!agentId) return cmdHandled(false, 'Agent not found.', { uiActivity: 'Error: Agent not found' });
     const agents = await fetch('/api/atlas/agents', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => ({}));
     const agent = (agents.agents || []).find((a) => a.id === agentId);
     const label = agent?.name || agentId;
-    return cmdHandled(true, `${label} selected.`);
+    return cmdHandled(true, `${label} selected.`, {
+      uiActions: [
+        { type: 'navigate', payload: { route: 'agents' } },
+        { type: 'open_agent', payload: { agentId } },
+      ],
+      uiActivity: `Done: ${label} selected`,
+    });
   }
 
   if (parsed.objectType === 'report') {
     if (parsed.action === 'open') {
       if (parsed.objectName === 'latest') {
-        const ok = await uiAgents?.openLatestReport?.(ctx.currentAgentId);
-        return cmdHandled(!!ok, ok ? 'Opening latest report.' : 'No report found.');
+        const aid = ctx.currentAgentId;
+        await uiAgents?.refreshOffice?.();
+        const result = await uiAgents?.pickLatestReportInfo?.(aid);
+        const ok = result?.ok;
+        return cmdHandled(!!ok, ok ? 'Opening latest report.' : (result?.message || 'No report found.'), {
+          uiActions: ok ? [
+            { type: 'open_report', payload: { reportId: result.reportId } },
+            { type: 'scroll_report_top', payload: {} },
+          ] : [
+            { type: 'refresh_agent', payload: { agentId: aid } },
+            { type: 'show_command_result', payload: { message: result?.message || 'No report found.', ok: false } },
+          ],
+          uiActivity: ok ? 'Executing: Open latest report' : `Error: ${result?.message || 'No report'}`,
+        });
       }
       const ok = await uiAgents?.openReportByTitle?.(parsed.objectName, ctx.currentAgentId);
-      return cmdHandled(!!ok, ok ? 'Opening report.' : 'Report not found.');
+      return cmdHandled(!!ok, ok ? 'Opening report.' : 'Report not found.', {
+        uiActivity: ok ? 'Done: Opening report' : 'Error: Report not found',
+      });
+    }
+    if (parsed.action === 'read_report') {
+      const summary = document.getElementById('atlas-report-modal-summary')?.textContent?.trim()
+        || document.getElementById('atlas-report-modal-body')?.textContent?.trim()?.slice(0, 1200);
+      return cmdHandled(!!summary, summary || 'No report open to read.', {
+        speakFull: true,
+        uiActivity: 'Executing: Read report',
+      });
     }
     if (['approve', 'revise', 'archive', 'send_next'].includes(parsed.action)) {
-      const reportId = ctx.currentReportId;
-      if (!reportId) return cmdHandled(false, 'No report open.');
-      if (parsed.action === 'send_next') {
-        const ok = await uiAgents?.actOnReport?.(reportId, 'send_next');
-        return cmdHandled(!!ok, ok ? 'Sent to next agent.' : 'Send failed.');
-      }
-      const ok = await uiAgents?.actOnReport?.(reportId, parsed.action);
-      const labels = { approve: 'Approved.', revise: 'Revision requested.', archive: 'Archived.' };
-      return cmdHandled(!!ok, ok ? labels[parsed.action] : 'Action failed.');
+      const rid = ctx.currentReportId
+        || document.getElementById('atlas-report-modal')?.dataset?.activeReportId;
+      if (!rid) return cmdHandled(false, 'No report open.', { uiActivity: 'Error: No report open' });
+      await uiAgents?.actOnReport?.(rid, parsed.action);
+      const labels = { approve: 'Approved.', revise: 'Revision requested.', archive: 'Archived.', send_next: 'Sent to next agent.' };
+      return cmdHandled(true, labels[parsed.action] || 'Updated.', {
+        uiActions: [
+          { type: 'refresh_agent', payload: { agentId: ctx.currentAgentId } },
+          { type: 'refresh_reports', payload: {} },
+        ],
+        uiActivity: `Done: ${labels[parsed.action]}`,
+      });
     }
     if (parsed.action === 'summarise') {
-      const summary = document.getElementById('atlas-report-modal-summary')?.textContent
-        || document.getElementById('atlas-report-modal-body')?.textContent?.slice(0, 400);
-      return cmdHandled(true, summary || 'No summary available.');
+      const summary = document.getElementById('atlas-report-modal-summary')?.textContent?.trim()
+        || document.getElementById('atlas-report-modal-body')?.textContent?.trim()?.slice(0, 300);
+      return cmdHandled(true, summary || 'No summary available.', {
+        uiActivity: 'Done: Summary',
+      });
     }
   }
 
@@ -513,15 +691,28 @@ export async function tryHandleVoiceAction(transcript) {
   _debug('transcript', transcript);
   _debug('context', ctx);
 
+  const personalResult = await atlasPersonalisationVoice.tryHandlePersonalisationVoice(transcript);
+  if (personalResult?.handled) return personalResult;
+
+  const calResult = await atlasCalendarVoice.tryHandleCalendarVoice(transcript);
+  if (calResult?.handled) return calResult;
+
+  const notesResult = await atlasNotesVoice.tryHandleNotesVoice(transcript);
+  if (notesResult?.handled) return notesResult;
+
   const parsed = parseVoiceAction(transcript, ctx);
   _debug('parsed', parsed);
 
   if (!parsed.handled) {
     if (_capture?.mode === 'message_body') {
-      const fallback = parseVoiceAction(transcript, ctx);
-      if (!fallback.handled) {
-        _capture.message = [_capture.message, transcript.trim()].filter(Boolean).join(' ').trim();
-        return cmdHandled(true, 'Message captured. Say finish message to send, or cancel message.');
+      const raw = _stripPrefixes(String(transcript || '').trim());
+      if (raw) {
+        _capture.message = [_capture.message, raw].filter(Boolean).join(' ').trim();
+        window.AtlasAgentsUI?.updateAgentMessageDraft?.(_capture.message, _capture.agentId);
+        return cmdHandled(true, 'Captured.', {
+          uiAction: { type: 'update_agent_message', payload: { text: _capture.message, agentId: _capture.agentId } },
+          uiActivity: 'Executing: Capture message',
+        });
       }
     }
     return cmdUnhandled();

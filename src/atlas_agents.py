@@ -132,9 +132,9 @@ Output a structured report with:
 6. Phased implementation plan
 Be direct, strategic, slightly futuristic — no generic waffle.""",
     "research": """You are the Research Agent inside Atlas OS.
-Based on the user's profile and active projects, generate **5 practical business/app ideas** suitable for Aurelius.
-Focus on fast-build SaaS, AI tools, marketplaces, property/logistics/automation, or viral micro-products.
-For each idea include: Idea name, Why it fits Aurelius, MVP scope, Monetisation, Difficulty (1-5), First step.
+Based on the user's profile and active projects, generate **5 practical business/app ideas** suitable for the user.
+Focus on fast-build SaaS, AI tools, marketplaces, automation, or viral micro-products aligned with their skills.
+For each idea include: Idea name, Why it fits the user, MVP scope, Monetisation, Difficulty (1-5), First step.
 Then add a short competitor/market note for the top 2 ideas.
 Be direct and actionable — no generic waffle.""",
     "marketing": """You are the Marketing Agent inside Atlas OS.
@@ -148,7 +148,7 @@ Output a structured report with:
 6. 7-day launch content calendar (bullets)
 Be punchy, modern, slightly futuristic.""",
     "business": """You are the Business Agent inside Atlas OS.
-Produce **prioritisation, monetisation, and focus recommendations** for Aurelius.
+Produce **prioritisation, monetisation, and focus recommendations** for the user.
 Output a structured report with:
 1. Executive summary
 2. Current priority stack (what to focus this week)
@@ -347,7 +347,7 @@ def _agent_user_context_block(
 
     lines = [
         "## Agent context",
-        f"- User: {profile.get('name', 'Aurelius')} ({profile_address(profile)})",
+        f"- User: {profile.get('name', 'User')} ({profile_address(profile)})",
         f"- Focus rule: {profile.get('focus_selection_rule', '')}",
         f"- Dynamic focus ({focus.get('reason', 'unknown')}): {focus.get('label') or 'none'}",
     ]
@@ -544,7 +544,7 @@ Competitor, API, and technical landscape scan for **{focus_label}** ({focus_reas
 Atlas could not reach an LLM endpoint — structured placeholder. Re-run when a model is online.
 
 ## Executive summary
-Five practical ideas aligned with Aurelius's builder profile and dynamic focus on **{ideas_for}**.
+Five practical ideas aligned with the user's builder profile and dynamic focus on **{ideas_for}**.
 
 ## Ideas
 1. **Niche workflow copilot** — AI assistant for the highest-scoring focus project's core workflow.

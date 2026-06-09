@@ -891,6 +891,13 @@ function initializeEventListeners() {
     });
   });
     toolTasksBtn.addEventListener('click', () => {
+      if (document.body.classList.contains('atlas-os')) {
+        import('./js/atlasOverlayTools.js').then((m) => {
+          if (tasksModule?.isTasksOpen?.()) m.default.closeOverlayTool('tasks');
+          else m.default.openOverlayTool('tasks');
+        }).catch(() => {});
+        return;
+      }
       if (tasksModule) {
         tasksModule.isTasksOpen() ? tasksModule.closeTasks() : tasksModule.openTasks();
       }
@@ -1005,28 +1012,14 @@ function initializeEventListeners() {
     '/projects': () => homeModule.showProjects({ skipHistory: true }),
     '/finance': () => homeModule.showFinance({ skipHistory: true }),
     '/notes':    () => {
-      if (!notesModule) return;
-      _collapseSidebarToRail();
-      notesModule.openPanel();
-      // Promote to fullscreen-with-rail-visible. The pane wires up its own
-      // fullscreen toggle (#notes-fullscreen-toggle); piggyback on that
-      // path so the button icon flips and overflow:hidden gets applied
-      // alongside. Retry on rAF in case the panel mounts a tick later.
-      const _go = () => {
-        const btn = document.getElementById('notes-fullscreen-toggle');
-        const pane = document.querySelector('.notes-pane');
-        if (!pane) return false;
-        if (!pane.classList.contains('notes-pane-fullscreen') && btn) btn.click();
-        return true;
-      };
-      if (!_go()) {
-        requestAnimationFrame(_go);
-        setTimeout(_go, 50);
-        setTimeout(_go, 200);
-      }
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('notes')).catch(() => {});
     },
-    '/calendar': () => calendarModule && calendarModule.openCalendar(),
-    '/cookbook': () => document.getElementById('tool-cookbook-btn')?.click(),
+    '/calendar': () => {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('calendar')).catch(() => {});
+    },
+    '/cookbook': () => {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('cookbook')).catch(() => {});
+    },
     '/email':    () => {
       // Collapse the wide sidebar → icon rail (48px) so the user keeps
       // navigation visible alongside the fullscreen email view.
@@ -1060,10 +1053,16 @@ function initializeEventListeners() {
       setTimeout(_goFullscreen, 50);
       setTimeout(_goFullscreen, 200);
     },
-    '/memory':   () => document.getElementById('tool-memory-btn')?.click(),
+    '/memory':   () => {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('brain')).catch(() => {});
+    },
     '/gallery':  () => document.getElementById('tool-gallery-btn')?.click(),
-    '/tasks':    () => document.getElementById('tool-tasks-btn')?.click(),
-    '/library':  () => sessionModule && sessionModule.openLibrary && sessionModule.openLibrary(),
+    '/tasks':    () => {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('tasks')).catch(() => {});
+    },
+    '/library':  () => {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('library')).catch(() => {});
+    },
   };
   const _opener = _routeOpen[urlPath];
   // Defer the opener — at this point in init, the modules whose handlers
@@ -1531,6 +1530,10 @@ function initializeEventListeners() {
   const toolMemoryBtn = el('tool-memory-btn');
   if (toolMemoryBtn && memoryModal) {
     toolMemoryBtn.addEventListener('click', () => {
+      if (document.body.classList.contains('atlas-os')) {
+        import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('brain')).catch(() => {});
+        return;
+      }
       memoryModal.classList.remove('hidden');
       if (memoryModule && memoryModule.renderMemoryList) memoryModule.renderMemoryList();
       if (memoryModule && memoryModule.updateMemoryCount) memoryModule.updateMemoryCount();
@@ -3301,24 +3304,17 @@ function initializeEventListeners() {
       homeModule.showFinance();
       return;
     }
-    homeModule.showAssistantView({ dockId: toolId });
     if (toolId === 'settings') {
       settingsModule.open();
       return;
     }
-    if (toolId === 'library') {
-      if (sessionModule && sessionModule.openLibrary) sessionModule.openLibrary();
+    const overlayTools = ['notes', 'library', 'cookbook', 'calendar', 'brain', 'tasks'];
+    const overlayId = toolId === 'brain' ? 'brain' : toolId;
+    if (overlayTools.includes(toolId)) {
+      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool(overlayId)).catch(() => {});
       return;
     }
-    const btnMap = {
-      brain: 'tool-memory-btn',
-      tasks: 'tool-tasks-btn',
-      calendar: 'tool-calendar-btn',
-      notes: 'tool-notes-btn',
-      cookbook: 'tool-cookbook-btn',
-    };
-    const btn = el(btnMap[toolId]);
-    if (btn) btn.click();
+    homeModule.showAssistantView({ dockId: toolId });
   }
 
   import('./js/atlasActiveProject.js').then((m) => m.default.initAtlasActiveProject({
@@ -4256,8 +4252,13 @@ function startOdysseusApp() {
         // Fire any URL route opener now that sessions + module wiring are
         // ready. Deferred from up top of init for exactly this reason.
         const routePath = window.location.pathname;
+        const _overlayRoutes = ['/notes', '/calendar', '/library', '/cookbook', '/memory', '/tasks'];
         if (window._odysseusRouteOpener) {
-          if (!isAtlasShellRoute(routePath)) homeModule.showAssistantView({ dockId: 'assistant' });
+          if (_overlayRoutes.includes(routePath)) {
+            homeModule.showHome({ skipHistory: true });
+          } else if (!isAtlasShellRoute(routePath) && routePath !== '/assistant') {
+            homeModule.showAssistantView({ dockId: 'assistant' });
+          }
           try { window._odysseusRouteOpener(); } catch (_) {}
           window._odysseusRouteOpener = null;
         } else if (isAtlasHomeRoute(routePath)) {

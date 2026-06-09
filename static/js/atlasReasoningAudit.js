@@ -51,7 +51,7 @@ function _renderAudit(data) {
   const wh = data.workspace_health || {};
   const focus = data.active_focus || {};
   const seeds = data.old_seed_warnings || {};
-  const houseify = data.houseify_audit;
+  const flagged = data.flagged_project_audit;
   const client = _clientStorageAudit();
 
   let html = '';
@@ -85,13 +85,14 @@ function _renderAudit(data) {
     </div>
   `).join('') || '<p class="atlas-audit-empty">No projects</p>');
 
-  if (houseify) {
-    const c = houseify.checks || {};
-    html += _section('Houseify Specific Test', `
-      <p>Indexed features: ${houseify.indexed_features_count ?? 0}/6</p>
+  if (flagged) {
+    const c = flagged.checks || {};
+    const pname = flagged.project_name || flagged.project_id || 'Project';
+    html += _section(`${pname} Feature Audit`, `
+      <p>Indexed features: ${flagged.indexed_features_count ?? 0}/6</p>
       <p>Auth: ${c.auth_files ? '✓' : '—'} · DB/schema: ${c.database_schema ? '✓' : '—'} · Supabase/Base44: ${c.supabase_base44 ? '✓' : '—'}</p>
       <p>Routes/pages: ${c.routes_pages ? '✓' : '—'} · Dashboard: ${c.dashboard_logic ? '✓' : '—'} · Login logic: ${c.login_auth_logic ? '✓' : '—'}</p>
-      ${(houseify.warnings || []).map(w => `<p class="atlas-audit-warn">${_esc(w)}</p>`).join('')}
+      ${(flagged.warnings || []).map(w => `<p class="atlas-audit-warn">${_esc(w)}</p>`).join('')}
     `);
   }
 

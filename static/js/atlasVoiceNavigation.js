@@ -1,6 +1,8 @@
 // Atlas OS — voice navigation + project/council voice actions (client-side)
 
 import atlasActiveProject from './atlasActiveProject.js';
+import atlasOverlayTools from './atlasOverlayTools.js';
+import atlasPersonality from './atlasPersonality.js';
 import { cmdHandled, cmdUnhandled } from './atlasCommandResult.js';
 
 let _deps = {};
@@ -12,8 +14,8 @@ const NAV_TARGETS = {
   projects: { label: 'Projects', paths: ['/projects'], navigate: () => _goProjects() },
   agents: { label: 'Agents', paths: ['/agents'], navigate: () => _goAgents() },
   finance: { label: 'Finance', paths: ['/finance'], navigate: () => _goFinance() },
-  brain: { label: 'Brain', paths: ['/memory'], navigate: () => _openTool('memory') },
-  tasks: { label: 'Tasks', paths: ['/tasks'], navigate: () => _openTool('tasks') },
+  brain: { label: 'Brain', paths: ['/memory'], navigate: () => atlasOverlayTools.openOverlayTool('brain') },
+  tasks: { label: 'Tasks', paths: ['/tasks'], navigate: () => atlasOverlayTools.openOverlayTool('tasks') },
   calendar: { label: 'Calendar', paths: ['/calendar'], navigate: () => _openCalendar() },
   notes: { label: 'Notes', paths: ['/notes'], navigate: () => _openNotes() },
   library: { label: 'Library', paths: ['/library'], navigate: () => _openLibrary() },
@@ -35,49 +37,46 @@ function _norm(text) {
   return String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function _goHome() {
-  window.homeModule?.showHome?.({ skipHistory: false });
+async function _goHome() {
+  await window.homeModule?.showHome?.({ skipHistory: false });
   history.pushState({ atlasView: 'home' }, '', '/home');
 }
 
-function _goAssistant() {
+async function _goAssistant() {
   window.homeModule?.showAssistantView?.({ dockId: 'assistant' });
   history.pushState({}, '', '/assistant');
 }
 
-function _goProjects() {
-  window.homeModule?.showProjects?.({ skipHistory: false });
+async function _goProjects() {
+  await window.homeModule?.showProjects?.({ skipHistory: false });
 }
 
-function _goAgents() {
-  window.homeModule?.showAgentsOffice?.({ skipHistory: false });
+async function _goAgents() {
+  await window.homeModule?.showAgentsOffice?.({ skipHistory: false });
 }
 
-function _goFinance() {
-  window.homeModule?.showFinance?.({ skipHistory: false });
+async function _goFinance() {
+  await window.homeModule?.showFinance?.({ skipHistory: false });
 }
 
 function _openTool(id) {
   _deps.openTool?.(id);
 }
 
-function _openCalendar() {
-  document.getElementById('tool-calendar-btn')?.click()
-    || (window.location.pathname !== '/calendar' && history.pushState({}, '', '/calendar'));
+async function _openCalendar() {
+  await atlasOverlayTools.openOverlayTool('calendar');
 }
 
-function _openNotes() {
-  if (window.location.pathname !== '/notes') history.pushState({}, '', '/notes');
-  window._odysseusRouteOpener?.();
-  import('./notes.js').then((m) => m.default?.openPanel?.()).catch(() => {});
+async function _openNotes() {
+  await atlasOverlayTools.openOverlayTool('notes');
 }
 
-function _openLibrary() {
-  window.sessionModule?.openLibrary?.();
+async function _openLibrary() {
+  await atlasOverlayTools.openOverlayTool('library');
 }
 
-function _openCookbook() {
-  document.getElementById('tool-cookbook-btn')?.click();
+async function _openCookbook() {
+  await atlasOverlayTools.openOverlayTool('cookbook');
 }
 
 function _openSettings() {
@@ -124,8 +123,14 @@ export async function tryHandleNavigation(text) {
 
   for (const [key, cfg] of Object.entries(NAV_TARGETS)) {
     if (norm === key || norm === cfg.label.toLowerCase()) {
-      cfg.navigate();
-      return cmdHandled(true, `Opening ${cfg.label}.`);
+      await cfg.navigate();
+      const isOverlay = atlasOverlayTools.TOOL_IDS.includes(key);
+      return cmdHandled(true, atlasPersonality.formatAction(`Opening ${cfg.label}`), {
+        uiAction: isOverlay
+          ? { type: 'open_overlay', payload: { tool: key } }
+          : { type: 'navigate', payload: { route: key } },
+        uiActivity: `Done: Opening ${cfg.label}`,
+      });
     }
   }
   return cmdUnhandled();
@@ -174,7 +179,7 @@ export async function tryHandleProjectCommands(text) {
     if (proj) {
       const mod = await import('./atlasProjectHQ.js');
       mod.default.openProjectHQ(proj.id);
-      return cmdHandled(true, `Opening Project HQ for ${proj.name || proj.id}.`);
+      return cmdHandled(true, atlasPersonality.formatAction(`Opening Project HQ for ${proj.name || proj.id}`));
     }
   }
 
@@ -184,7 +189,7 @@ export async function tryHandleProjectCommands(text) {
     if (proj) {
       const mod = await import('./atlasProjectHQ.js');
       mod.default.openProjectHQ(proj.id);
-      return cmdHandled(true, `Opening ${proj.name} for review.`);
+      return cmdHandled(true, atlasPersonality.formatAction(`Opening ${proj.name} for review`));
     }
   }
 
@@ -231,7 +236,7 @@ export async function tryHandleProjectCommands(text) {
     if (!proj) return cmdHandled(false, 'No active project set.');
     const mod = await import('./atlasProjectHQ.js');
     mod.default.openProjectHQ(proj.id);
-    return cmdHandled(true, `Opening ${proj.name || proj.id}.`);
+    return cmdHandled(true, atlasPersonality.formatAction(`Opening ${proj.name || proj.id}`));
   }
 
   return cmdUnhandled();

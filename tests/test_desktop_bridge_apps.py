@@ -111,11 +111,13 @@ def test_resolve_all_apps_shape():
 
 def test_alias_resolution():
     index = build_alias_index()
-    assert index.get("rocket league") == "rocketleague"
-    assert resolve_alias("play fortnite") == "fortnite"
-    assert resolve_alias("fortnite") == "fortnite"
+    # Disabled apps in the default public registry are excluded from voice aliases.
+    assert index.get("rocket league") is None
+    assert resolve_alias("play fortnite") is None
+    assert resolve_alias("fortnite") is None
 
 
-def test_unsupported_app():
-    result = resolve_app("notepad")
+def test_disabled_app_not_resolvable():
+    result = resolve_app("cursor")
     assert result["ok"] is False
+    assert "disabled" in result["message"].lower()

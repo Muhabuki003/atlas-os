@@ -1,0 +1,264 @@
+/* Atlas OS — Personalisation V2 theme system */
+
+body.atlas-os.atlas-theme-transitioning {
+  transition: opacity 0.25s ease, filter 0.25s ease;
+  opacity: 0.82;
+}
+
+/* ── Atlas Blue (default) ── */
+body.atlas-os[data-atlas-theme="default-blue"],
+html[data-atlas-theme="default-blue"] body.atlas-os {
+  --atlas-primary: #50c8ff;
+  --atlas-secondary: #3a9fd9;
+  --atlas-border: rgba(80, 200, 255, 0.25);
+  --atlas-text: #c8e8ff;
+  --atlas-glow: rgba(80, 200, 255, 0.45);
+  --atlas-button: rgba(50, 140, 220, 0.35);
+  --atlas-card: rgba(6, 16, 30, 0.55);
+  --atlas-hover: rgba(80, 200, 255, 0.14);
+  --atlas-grid: rgba(80, 200, 255, 0.04);
+  --atlas-background: #050a12;
+  --atlas-success: #50fa7b;
+  --atlas-warning: #ffb347;
+  --atlas-rgb: 80, 200, 255;
+  --atlas-accent: var(--atlas-primary);
+  --atlas-border-glow: var(--atlas-border);
+  --atlas-globe-tint: rgba(80, 200, 255, 0.65);
+}
+
+/* ── Matrix Green ── */
+body.atlas-os[data-atlas-theme="matrix-green"],
+html[data-atlas-theme="matrix-green"] body.atlas-os {
+  --atlas-primary: #00ff66;
+  --atlas-secondary: #00cc52;
+  --atlas-border: rgba(0, 255, 102, 0.28);
+  --atlas-text: #c8ffd8;
+  --atlas-glow: rgba(0, 255, 102, 0.42);
+  --atlas-button: rgba(0, 180, 70, 0.38);
+  --atlas-card: rgba(4, 14, 8, 0.62);
+  --atlas-hover: rgba(0, 255, 102, 0.12);
+  --atlas-grid: rgba(0, 255, 102, 0.05);
+  --atlas-background: #020804;
+  --atlas-success: #3dff90;
+  --atlas-warning: #b8ff50;
+  --atlas-rgb: 0, 255, 102;
+  --atlas-accent: var(--atlas-primary);
+  --atlas-border-glow: var(--atlas-border);
+  --atlas-globe-tint: rgba(0, 255, 102, 0.55);
+}
+
+/* ── Purple ── */
+body.atlas-os[data-atlas-theme="purple"],
+html[data-atlas-theme="purple"] body.atlas-os {
+  --atlas-primary: #b48cff;
+  --atlas-secondary: #8b5cf6;
+  --atlas-border: rgba(180, 140, 255, 0.28);
+  --atlas-text: #e4d4ff;
+  --atlas-glow: rgba(180, 140, 255, 0.45);
+  --atlas-button: rgba(140, 90, 230, 0.38);
+  --atlas-card: rgba(12, 8, 28, 0.58);
+  --atlas-hover: rgba(180, 140, 255, 0.14);
+  --atlas-grid: rgba(180, 140, 255, 0.045);
+  --atlas-background: #060818;
+  --atlas-success: #a78bfa;
+  --atlas-warning: #f0abfc;
+  --atlas-rgb: 180, 140, 255;
+  --atlas-accent: var(--atlas-primary);
+  --atlas-border-glow: var(--atlas-border);
+  --atlas-globe-tint: rgba(180, 140, 255, 0.55);
+}
+
+/* ── Red Gold ── */
+body.atlas-os[data-atlas-theme="red-gold"],
+html[data-atlas-theme="red-gold"] body.atlas-os {
+  --atlas-primary: #ffb347;
+  --atlas-secondary: #e07830;
+  --atlas-border: rgba(255, 180, 80, 0.3);
+  --atlas-text: #ffe8c8;
+  --atlas-glow: rgba(255, 140, 60, 0.42);
+  --atlas-button: rgba(200, 100, 30, 0.4);
+  --atlas-card: rgba(18, 10, 4, 0.62);
+  --atlas-hover: rgba(255, 160, 80, 0.14);
+  --atlas-grid: rgba(255, 160, 80, 0.04);
+  --atlas-background: #080604;
+  --atlas-success: #c9a227;
+  --atlas-warning: #ff6b4a;
+  --atlas-rgb: 255, 160, 80;
+  --atlas-accent: var(--atlas-primary);
+  --atlas-border-glow: var(--atlas-border);
+  --atlas-globe-tint: rgba(255, 160, 80, 0.55);
+}
+
+/* ── Pink ── */
+body.atlas-os[data-atlas-theme="pink"],
+html[data-atlas-theme="pink"] body.atlas-os {
+  --atlas-primary: #ff8cb8;
+  --atlas-secondary: #f472b6;
+  --atlas-border: rgba(255, 140, 184, 0.28);
+  --atlas-text: #ffe8f2;
+  --atlas-glow: rgba(255, 140, 184, 0.42);
+  --atlas-button: rgba(220, 80, 140, 0.36);
+  --atlas-card: rgba(14, 8, 18, 0.58);
+  --atlas-hover: rgba(255, 140, 184, 0.14);
+  --atlas-grid: rgba(255, 140, 184, 0.04);
+  --atlas-background: #060810;
+  --atlas-success: #fda4af;
+  --atlas-warning: #fcd34d;
+  --atlas-rgb: 255, 140, 184;
+  --atlas-accent: var(--atlas-primary);
+  --atlas-border-glow: var(--atlas-border);
+  --atlas-globe-tint: rgba(255, 140, 184, 0.55);
+}
+
+/* ── Global bridge: themed Atlas OS surfaces ── */
+body.atlas-os[data-atlas-theme] {
+  background-color: var(--atlas-background);
+}
+
+body.atlas-os[data-atlas-theme] .atlas-os-backdrop {
+  background: radial-gradient(ellipse 120% 80% at 50% 40%, color-mix(in srgb, var(--atlas-background) 88%, var(--atlas-primary)) 0%, var(--atlas-background) 55%, #020508 100%);
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-bg {
+  background-image:
+    linear-gradient(var(--atlas-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--atlas-grid) 1px, transparent 1px);
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-scanline {
+  background: linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--atlas-primary) 8%, transparent) 48%, transparent 52%);
+}
+
+body.atlas-os[data-atlas-theme] .atlas-os-status-bar {
+  border-bottom-color: var(--atlas-border) !important;
+  box-shadow: 0 2px 16px var(--atlas-glow);
+}
+
+body.atlas-os[data-atlas-theme] .atlas-os-status-wake,
+body.atlas-os[data-atlas-theme] .atlas-os-status-pill {
+  border-color: var(--atlas-border) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-os-status-pill--toggle:hover {
+  border-color: var(--atlas-primary) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-os-status-wake[data-status="wake-listening"] .atlas-voice-status-chip-dot,
+body.atlas-os[data-atlas-theme] .atlas-os-status-wake[data-status="command-listening"] .atlas-voice-status-chip-dot,
+body.atlas-os[data-atlas-theme] .atlas-os-status-wake[data-status="listening"] .atlas-voice-status-chip-dot {
+  background: var(--atlas-primary) !important;
+  box-shadow: 0 0 8px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-dock,
+body.atlas-os[data-atlas-theme] .atlas-dock-global {
+  border-color: var(--atlas-border) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 48px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-dock-item:hover {
+  background: var(--atlas-hover) !important;
+  color: var(--atlas-text) !important;
+  box-shadow: 0 0 24px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-dock-item.active {
+  background: var(--atlas-button) !important;
+  box-shadow: 0 0 20px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-panel,
+body.atlas-os[data-atlas-theme] .atlas-home-widget,
+body.atlas-os[data-atlas-theme] .atlas-home-briefing-card {
+  border-color: var(--atlas-border) !important;
+  background: var(--atlas-card) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-section-title {
+  color: color-mix(in srgb, var(--atlas-primary) 70%, var(--atlas-text)) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-title,
+body.atlas-os[data-atlas-theme] .atlas-mc-command-input {
+  color: var(--atlas-text) !important;
+  text-shadow: 0 0 16px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-command {
+  border-color: var(--atlas-border) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-mc-command-submit,
+body.atlas-os[data-atlas-theme] .atlas-briefing-btn:not(.atlas-briefing-btn--ghost) {
+  border-color: color-mix(in srgb, var(--atlas-primary) 55%, transparent) !important;
+  background: var(--atlas-button) !important;
+  box-shadow: 0 0 16px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-briefing-btn--ghost,
+body.atlas-os[data-atlas-theme] .atlas-home-recent-card,
+body.atlas-os[data-atlas-theme] .atlas-home-agent {
+  border-color: var(--atlas-border) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-briefing-btn:hover,
+body.atlas-os[data-atlas-theme] .atlas-mc-command-submit:hover {
+  background: color-mix(in srgb, var(--atlas-primary) 32%, transparent) !important;
+  box-shadow: 0 0 22px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-cursor-fx-glow {
+  background: radial-gradient(circle, color-mix(in srgb, var(--atlas-primary) 22%, transparent) 0%, transparent 72%) !important;
+}
+
+body.atlas-os[data-atlas-theme] .modal.atlas-overlay-modal:not(.hidden),
+body.atlas-os[data-atlas-theme] .notes-pane.atlas-overlay-tool,
+body.atlas-os[data-atlas-theme] #memory-modal.atlas-overlay-modal:not(.hidden),
+body.atlas-os[data-atlas-theme] #tasks-modal.atlas-overlay-modal:not(.hidden) {
+  border-color: var(--atlas-border) !important;
+  box-shadow: 0 0 32px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .cal-day.cal-voice-highlight,
+body.atlas-os[data-atlas-theme] .notes-voice-fill {
+  box-shadow: 0 0 0 2px var(--atlas-primary), 0 0 18px var(--atlas-glow) !important;
+}
+
+body.atlas-os[data-atlas-theme] .atlas-home-agent-status--ready {
+  color: var(--atlas-success) !important;
+  border-color: color-mix(in srgb, var(--atlas-success) 40%, transparent) !important;
+}
+
+/* Settings — Atlas Profile */
+.atlas-profile-card fieldset { border: none; margin: 0 0 14px; padding: 0; }
+.atlas-profile-legend {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  margin-bottom: 6px;
+}
+.atlas-profile-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.atlas-profile-subhead {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.atlas-profile-range-val {
+  display: inline-block;
+  min-width: 2.5rem;
+  font-size: 0.78rem;
+  opacity: 0.75;
+  margin-left: 6px;
+}

@@ -135,11 +135,20 @@ export function startAtlasCore() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
+  function _themeRgb() {
+    const raw = getComputedStyle(document.body).getPropertyValue('--atlas-rgb').trim() || '80, 200, 255';
+    const parts = raw.split(',').map((n) => parseInt(n.trim(), 10));
+    return [parts[0] || 80, parts[1] || 200, parts[2] || 255];
+  }
+
   function drawGlobe(now) {
     if (w < 8 || h < 8) return;
+    const isBgGlobe = canvas.parentElement?.classList.contains('atlas-mc-globe-bg');
+    const [tr, tg, tb] = _themeRgb();
     const cx = w / 2;
     const cy = h / 2;
-    const radius = Math.min(w, h) * 0.38;
+    const radius = Math.min(w, h) * (isBgGlobe ? 0.44 : 0.38);
+    const bgMul = isBgGlobe ? 0.95 : 1;
     const rotY = (now - t0) * 0.00035;
     const rotX = 0.35;
 
@@ -178,7 +187,7 @@ export function startAtlasCore() {
       if (!pa || !pb) continue;
       const depth = (pa.z + pb.z) / 2;
       const alpha = 0.12 + (depth + 1) * 0.22;
-      ctx.strokeStyle = `rgba(80, 200, 255, ${alpha})`;
+      ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${alpha * bgMul})`;
       ctx.beginPath();
       ctx.moveTo(pa.sx, pa.sy);
       ctx.lineTo(pb.sx, pb.sy);
@@ -192,11 +201,11 @@ export function startAtlasCore() {
       const r = 2 + pulse * 1.5 * (n.z + 1) * 0.5;
       ctx.beginPath();
       ctx.arc(n.sx, n.sy, r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(120, 230, 255, ${alpha * pulse})`;
+      ctx.fillStyle = `rgba(${Math.min(255, tr + 40)}, ${Math.min(255, tg + 30)}, ${Math.min(255, tb + 15)}, ${alpha * pulse * bgMul})`;
       ctx.fill();
       ctx.beginPath();
       ctx.arc(n.sx, n.sy, r * 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(60, 180, 255, ${alpha * 0.15})`;
+      ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${alpha * 0.15})`;
       ctx.fill();
     }
 
@@ -208,7 +217,7 @@ export function startAtlasCore() {
         const dy = a.sy - b.sy;
         if (dx * dx + dy * dy > 120 * 120) continue;
         if (a.z < -0.2 || b.z < -0.2) continue;
-        ctx.strokeStyle = 'rgba(50, 160, 255, 0.12)';
+        ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, 0.12)`;
         ctx.beginPath();
         ctx.moveTo(a.sx, a.sy);
         ctx.lineTo(b.sx, b.sy);
@@ -217,8 +226,8 @@ export function startAtlasCore() {
     }
 
     const glow = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 1.15);
-    glow.addColorStop(0, 'rgba(60, 200, 255, 0.14)');
-    glow.addColorStop(0.5, 'rgba(30, 120, 200, 0.05)');
+    glow.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, 0.14)`);
+    glow.addColorStop(0.5, `rgba(${Math.floor(tr * 0.5)}, ${Math.floor(tg * 0.6)}, ${Math.floor(tb * 0.78)}, 0.05)`);
     glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = glow;
     ctx.beginPath();

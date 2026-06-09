@@ -1,10 +1,10 @@
 # Threat Model
 
-Odysseus is a **self-hosted AI workspace with privileged local access**. This document states the trust boundary so contributors can reason about security decisions without reading through the full auth and middleware stack.
+Atlas OS Community is a **self-hosted AI workspace with privileged local access** (inherited from the upstream Odysseus codebase). This document states the trust boundary so contributors can reason about security decisions without reading through the full auth and middleware stack.
 
 ## Trust Boundary
 
-Odysseus is designed for **trusted users on a private network**, not public exposure. The README describes it as "treat it like an admin console" — that framing is accurate. A logged-in admin can execute shell commands, read and write files, send email, and control model serving. This is intentional. The threat model does not try to prevent admins from doing these things. It does try to prevent:
+Atlas OS is designed for **trusted users on a private network**, not public exposure. [SECURITY.md](SECURITY.md) and [README.md](README.md) describe it as an admin console — that framing is accurate. A logged-in admin can execute shell commands, read and write files, send email, and control model serving. This is intentional. The threat model does not try to prevent admins from doing these things. It does try to prevent:
 
 - Unauthenticated access
 - Non-admins reaching admin-only capabilities

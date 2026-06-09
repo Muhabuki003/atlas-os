@@ -55,13 +55,13 @@ def test_diff_indexes_detects_changes():
 
 def test_index_project_read_only(atlas_data_dir, tmp_path):
     mount = tmp_path / "workspace"
-    root = mount / "Projects" / "houseify"
+    root = mount / "Projects" / "sampleapp"
     root.mkdir(parents=True)
     (root / "app.py").write_text("# app", encoding="utf-8")
 
     project = {
-        "id": "houseify",
-        "name": "Houseify",
+        "id": "sampleapp",
+        "name": "SampleApp",
         "path": str(root).replace("\\", "/"),
         "agents_allowed": True,
     }

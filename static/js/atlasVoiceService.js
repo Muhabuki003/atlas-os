@@ -12,6 +12,11 @@ const atlasVoiceService = {
     _inited = true;
     await import('./atlasVoiceContext.js');
     await import('./atlasVoiceActionsPanel.js');
+    await import('./atlasVoiceUi.js');
+    await import('./atlasOverlayTools.js');
+    await import('./atlasPersonality.js');
+    const userSettings = await import('./atlasUserSettings.js');
+    await userSettings.default.loadAtlasUserSettings();
     atlasVoiceNavigation.initAtlasVoiceNavigation(deps);
 
     const voiceMod = await import('./atlasVoiceMode.js');
