@@ -15,26 +15,13 @@ _WIN_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _CONTAINER_PATH_RE = re.compile(r"^/workspace(?:/|$)")
 
 BOOTSTRAP_DIRS: Tuple[str, ...] = (
-    "Projects",
-    "Knowledge",
-    "Reports",
-    "Memory",
-    "Inbox",
-    "Archive",
-    "Agents/Developer/Reports",
-    "Agents/Developer/Cursor Prompts",
-    "Agents/Developer/Reviews",
-    "Agents/Architect/Specs",
-    "Agents/Architect/Workflows",
-    "Agents/Research/Business Ideas",
-    "Agents/Research/Competitors",
-    "Agents/Research/APIs",
-    "Agents/Marketing/Launch Plans",
-    "Agents/Marketing/Content",
-    "Agents/Marketing/SEO",
-    "Agents/Business/Pricing",
-    "Agents/Business/Revenue",
-    "Agents/Business/Models",
+    "Offices",
+    "Global/Inbox",
+    "Global/Archive",
+    "Global/Reports",
+    "Global/Knowledge",
+    "Global/Memory",
+    "System",
 )
 
 AGENT_REPORT_FOLDERS: Dict[Tuple[str, str], str] = {
@@ -53,8 +40,8 @@ AGENT_REPORT_FOLDERS: Dict[Tuple[str, str], str] = {
 }
 
 NOT_MOUNTED_WARNING = (
-    "Atlas Workspace is not mounted. Create C:\\AtlasWorkspace, mount it as /workspace "
-    "in docker-compose.yml, then restart Docker."
+    "Atlas workspace not found. Use Settings → Workspace or Projects → Create Workspace Folders "
+    "to initialize the managed workspace."
 )
 
 
@@ -63,14 +50,34 @@ def container_root() -> str:
 
 
 def host_root_hint() -> str:
-    return os.environ.get("ATLAS_WORKSPACE_HOST") or r"C:\AtlasWorkspace"
+    env = os.environ.get("ATLAS_WORKSPACE_HOST")
+    if env:
+        return env
+    try:
+        from src.atlas_ce_workspace import host_display_path
+        return host_display_path()
+    except Exception:
+        return str(Path(__file__).resolve().parent.parent / "AtlasWorkspace")
 
 
 def projects_folder() -> str:
-    return f"{container_root()}/Projects"
+    try:
+        from src.atlas_ce_workspace import projects_scan_roots, resolve_workspace_root
+        roots = projects_scan_roots()
+        if roots:
+            return str(roots[0]).replace("\\", "/")
+        return str(resolve_workspace_root() / "Offices").replace("\\", "/")
+    except Exception:
+        return f"{container_root()}/Offices"
 
 
 def is_mounted() -> bool:
+    try:
+        from src.atlas_ce_workspace import workspace_exists, resolve_workspace_root
+        if workspace_exists(resolve_workspace_root()):
+            return True
+    except Exception:
+        pass
     root = Path(container_root())
     try:
         return root.is_dir()
@@ -80,8 +87,9 @@ def is_mounted() -> bool:
 
 def is_docker_mount_mode(ws: Optional[Dict[str, Any]] = None) -> bool:
     if ws:
-        return (ws.get("workspace_mode") or "docker_mount") == "docker_mount"
-    return True
+        mode = (ws.get("workspace_mode") or "managed").lower()
+        return mode in ("docker_mount", "external")
+    return bool(os.environ.get("ATLAS_WORKSPACE_CONTAINER"))
 
 
 def is_legacy_windows_path(path_str: str) -> bool:
@@ -170,6 +178,13 @@ def enrich_project(project: Dict[str, Any], ws: Optional[Dict[str, Any]] = None)
 
 
 def get_workspace_status(ws: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    try:
+        from src.atlas_ce_workspace import get_ce_workspace_status
+        mode = (ws or {}).get("workspace_mode") or "managed"
+        if mode == "managed" or not (ws or {}).get("workspace_mode"):
+            return get_ce_workspace_status(ws)
+    except Exception:
+        pass
     mounted = is_mounted()
     root = (ws or {}).get("workspace_container_root") or container_root()
     pf = (ws or {}).get("workspace_root") or projects_folder()
@@ -205,7 +220,13 @@ def bootstrap_workspace_folders() -> Dict[str, Any]:
 
 
 def startup_bootstrap() -> None:
-    """Called on app startup — create folders when /workspace is mounted."""
+    """Called on app startup — create CE workspace structure."""
+    try:
+        from src.atlas_ce_workspace import startup_ce_bootstrap
+        startup_ce_bootstrap()
+        return
+    except Exception as exc:
+        logger.warning("[atlas-workspace] CE bootstrap failed, using legacy: %s", exc)
     if not is_mounted():
         logger.warning("[atlas-workspace] %s", NOT_MOUNTED_WARNING)
         return
@@ -215,10 +236,23 @@ def startup_bootstrap() -> None:
 
 
 def validate_project_path(path_str: str, ws: Dict[str, Any]) -> Tuple[Optional[Path], Optional[str]]:
-    """Resolve project path for indexing — docker mount mode only accepts workspace mount paths."""
+    """Resolve project path for indexing."""
     raw = (path_str or "").strip()
     if not raw:
         return None, "Project path is required"
+    mode = (ws.get("workspace_mode") or "managed").lower()
+    if mode == "managed":
+        try:
+            from src.atlas_ce_workspace import resolve_workspace_root
+            root = resolve_workspace_root()
+            resolved = Path(raw).expanduser().resolve()
+            root_res = root.resolve()
+            if resolved == root_res or root_res in resolved.parents:
+                if resolved.is_dir():
+                    return resolved, None
+                return None, f"Path is not a directory: {resolved}"
+        except Exception as exc:
+            return None, f"Invalid path: {exc}"
     if is_docker_mount_mode(ws) and is_legacy_windows_path(raw) and not is_under_workspace_mount(raw):
         return None, (
             "Windows paths outside Atlas Workspace are not valid inside Docker. "

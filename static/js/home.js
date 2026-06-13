@@ -2,18 +2,17 @@
 // Atlas OS — Mission Control Shell
 // ============================================
 
-import { startAtlasCore, stopAtlasCore, startAtlasBackdrop } from './atlasCore.js';
+import { startAtlasCore, startAtlasBackdrop } from './atlasCore.js';
 import {
-  updateBriefingTicker,
   isAtlasHomeRoute,
   isAtlasAgentsRoute,
   isAtlasProjectsRoute,
   isAtlasFinanceRoute,
   atlasHomeUrl,
-  atlasAgentsUrl,
-  atlasProjectsUrl,
-  atlasFinanceUrl,
 } from './atlasShell.js';
+import { initAtlasGraph, refreshAtlasGraph } from './atlasGraph.js';
+import { initAtlasPowerLinks } from './atlasPowerLinks.js';
+import atlasShellModals from './atlasShellModals.js';
 import agentsOfficeModule from './agentsOffice.js';
 import atlasProjectsModule from './atlasProjects.js';
 import atlasFinanceModule from './atlasFinance.js';
@@ -77,6 +76,7 @@ export async function loadProjects() {
       _projects = [];
     }
   }
+  refreshAtlasGraph(_projects);
   return _projects;
 }
 
@@ -130,20 +130,22 @@ async function _loadBriefing() {
 }
 
 async function _refreshAtlasData() {
-  await Promise.all([
-    loadProjects(),
-    _loadAgents(),
-    _loadProfile(),
-    _loadBriefing(),
-  ]);
+  await loadProjects();
+  refreshAtlasGraph(_projects);
   _dataReady = true;
+  void Promise.all([_loadAgents(), _loadProfile(), _loadBriefing()]).then(() => {
+    if (_active || document.body.classList.contains('atlas-view-home')) {
+      _renderAll();
+      refreshAtlasGraph(_projects);
+    }
+  });
 }
 
 function _renderAll() {
   _renderBriefing();
   _renderProjects();
   _renderAgents();
-  void atlasGoals.renderHomeGoals();
+  refreshAtlasGraph(_projects);
 }
 
 function _renderBriefing() {
@@ -154,7 +156,6 @@ function _renderBriefing() {
     el.textContent = spoken
       || 'Atlas is ready. Scan your workspace and refresh the briefing.';
   }
-  updateBriefingTicker();
 
   const headline = _el('atlas-briefing-headline');
   const priorities = _el('atlas-briefing-priorities');
@@ -252,27 +253,6 @@ function _setNavActive(view) {
   if (asstBtn) asstBtn.classList.toggle('active', view === 'assistant');
 }
 
-function _setDockActive(id) {
-  document.querySelectorAll('.atlas-mc-dock-item').forEach(btn => {
-    btn.classList.toggle('active', id != null && btn.dataset.dockId === id);
-  });
-}
-
-const _SHELL_PANEL_IDS = [
-  'atlas-home',
-  'atlas-agents-office',
-  'atlas-projects-panel',
-  'atlas-finance-panel',
-];
-
-function _hideShellPanels() {
-  _SHELL_PANEL_IDS.forEach(id => {
-    const el = _el(id);
-    if (el) el.classList.add('hidden');
-  });
-  agentsOfficeModule.stopAgentLines();
-}
-
 function _setAtlasView(view) {
   document.body.classList.remove(
     'atlas-view-home',
@@ -284,11 +264,14 @@ function _setAtlasView(view) {
   );
   document.body.classList.add(`atlas-view-${view}`);
   document.body.classList.toggle('atlas-home-active', view === 'home');
+  document.body.classList.toggle('atlas-hub-active', view === 'home');
 }
 
-function _showShellPanel(id) {
-  const panel = _el(id);
-  if (panel) panel.classList.remove('hidden');
+function _ensureHomeVisible() {
+  const home = _el('atlas-home');
+  if (home) home.classList.remove('hidden');
+  _setAtlasView('home');
+  _scheduleCoreStart();
 }
 
 function _scheduleCoreStart() {
@@ -304,6 +287,7 @@ export function prefetchAtlasData() {
       .then(() => {
         if (_active || document.body.classList.contains('atlas-view-home')) {
           _renderAll();
+          refreshAtlasGraph(_projects);
           void _maybeAutoSpeakBriefing();
           void _refreshDesktopControl();
         }
@@ -318,31 +302,64 @@ export function prefetchAtlasData() {
   return _prefetchPromise;
 }
 
+async function _wipeCePersonalDataOnce() {
+  // v4: also clears leftover project_summaries from pre-CE builds.
+  const flag = 'atlas_ce_personal_wiped_v4';
+  if (localStorage.getItem(flag) === '1') return;
+  try {
+    await fetch('/api/atlas/ce/wipe-personal-data', { method: 'POST', credentials: 'same-origin' });
+    localStorage.setItem(flag, '1');
+  } catch (_) {}
+  try {
+    localStorage.removeItem('odysseus-calendar-cache');
+    localStorage.removeItem('cal-filters-collapsed');
+    localStorage.removeItem('cal-wk-hour-px');
+    localStorage.removeItem('odysseus.cal.detailH');
+    localStorage.removeItem('lastSessionId');
+    sessionStorage.removeItem('ody-session-probe');
+  } catch (_) {}
+}
+
 /** Boot Atlas shell immediately on app init (before loadSessions). */
+/** Refresh Atlas data after first-run setup completes. */
+export async function onSetupComplete() {
+  try {
+    localStorage.removeItem('atlas_offices_v1');
+    localStorage.removeItem('atlas_offices_v2');
+  } catch (_) {}
+  _prefetchPromise = null;
+  await prefetchAtlasData();
+  refreshAtlasGraph(_projects);
+  import('./officesModal.js').then((om) => om.default?.renderOfficesModal?.());
+  window.dispatchEvent(new CustomEvent('atlas-graph-changed'));
+}
+
 export function bootAtlasHome() {
+  void _wipeCePersonalDataOnce();
+  import('./windowResize.js').then((m) => m.clearWindowResizeLock?.()).catch(() => {});
   startAtlasBackdrop();
-
-  const onHome = isAtlasHomeRoute()
-    || document.body.classList.contains('atlas-view-home')
-    || document.body.classList.contains('atlas-home-active');
-
   prefetchAtlasData();
+  import('./atlasCursorFx.js').then((m) => m.default.initAtlasCursorFx?.());
+
+  _active = true;
+  _ensureHomeVisible();
+  _setNavActive('home');
+  window.atlasHomeConversation?.onHomeShown?.();
+
+  try {
+    initAtlasGraph({ onNodeClick: (action) => openAtlasModal(action), projects: _projects });
+    initAtlasPowerLinks();
+    void atlasShellModals.restoreSessionModals();
+  } catch (err) {
+    console.error('[atlas] graph init failed:', err);
+  }
 
   if (isAtlasFinanceRoute()) {
-    showFinance({ skipHistory: true });
+    void openAtlasModal('finance');
   } else if (isAtlasProjectsRoute()) {
-    showProjects({ skipHistory: true });
+    void openAtlasModal('projects');
   } else if (isAtlasAgentsRoute()) {
-    showAgentsOffice({ skipHistory: true });
-  } else if (onHome) {
-    _active = true;
-    _setAtlasView('home');
-    _setDockActive('home');
-    _setNavActive('home');
-    const home = _el('atlas-home');
-    if (home) home.classList.remove('hidden');
-    _scheduleCoreStart();
-    window.atlasHomeConversation?.onHomeShown?.();
+    void openAtlasModal('offices');
   }
 }
 
@@ -367,18 +384,12 @@ export async function showHome({ skipHistory = false, replace = false } = {}) {
   window.atlasVoiceService?.onRouteChange?.('home');
   document.title = 'Atlas OS';
   _syncHomeHistory({ skipHistory, replace });
-  _setAtlasView('home');
-  _hideShellPanels();
-  const home = _el('atlas-home');
-  if (home) home.classList.remove('hidden');
+  _ensureHomeVisible();
   _setNavActive('home');
-  _setDockActive('home');
-  _scheduleCoreStart();
 
   if (_dataReady) _renderAll();
   await prefetchAtlasData();
   _renderAll();
-  void atlasGoals.renderHomeGoals();
   void _maybeAutoSpeakBriefing();
   void _refreshDesktopControl();
 }
@@ -437,93 +448,41 @@ async function _desktopCommand(command, args = {}) {
 function _openDesktopSetup() {
   const hint = window._atlasDesktopHint || (
     'Atlas runs inside Docker and cannot open Windows apps directly.\n\n'
-    + 'A small Windows host bridge will receive approved commands (Cursor, Explorer, browsers) '
-    + 'after you enable desktop_commands_enabled and set bridge_url in data/atlas/desktop_permissions.json.'
+    + 'Configure launchable apps in Settings → Desktop Bridge, then enable desktop_commands_enabled '
+    + 'and set bridge_url / bridge_token in desktop_permissions.json.'
   );
   window.alert(hint);
 }
 
-function _syncAgentsHistory({ skipHistory = false } = {}) {
-  if (skipHistory) return;
-  const url = atlasAgentsUrl();
-  if (window.location.pathname === url) return;
-  history.pushState({ atlasView: 'agents' }, '', url);
-}
-
 export async function showAgentsOffice({ skipHistory = false } = {}) {
-  _active = false;
-  window.atlasVoiceService?.onRouteChange?.('agents');
-  document.title = 'Agents Office — Atlas OS';
-  _syncAgentsHistory({ skipHistory });
-  _setAtlasView('agents');
-  _hideShellPanels();
-  stopAtlasCore();
-  const office = _el('atlas-agents-office');
-  if (office) office.classList.remove('hidden');
-  _setNavActive('home');
-  _setDockActive('agents');
-
-  await prefetchAtlasData();
-  agentsOfficeModule.renderAgentsOffice(_agents);
-  await agentsOfficeModule.refreshAgentsOffice();
-  agentsOfficeModule.startAgentLines();
-  await atlasPipelineModule.renderPipeline();
-}
-
-function _syncProjectsHistory({ skipHistory = false } = {}) {
-  if (skipHistory) return;
-  const url = atlasProjectsUrl();
-  if (window.location.pathname === url) return;
-  history.pushState({ atlasView: 'projects' }, '', url);
+  await showHome({ skipHistory: true });
+  return openAtlasModal('offices');
 }
 
 export async function showProjects({ skipHistory = false } = {}) {
-  _active = false;
-  window.atlasVoiceService?.onRouteChange?.('projects');
-  document.title = 'Projects — Atlas OS';
-  _syncProjectsHistory({ skipHistory });
-  _setAtlasView('projects');
-  _hideShellPanels();
-  stopAtlasCore();
-  _showShellPanel('atlas-projects-panel');
-  _setNavActive('home');
-  _setDockActive('projects');
-  await prefetchAtlasData();
-  await atlasProjectsModule.renderProjectsPanel();
-}
-
-function _syncFinanceHistory({ skipHistory = false } = {}) {
-  if (skipHistory) return;
-  const url = atlasFinanceUrl();
-  if (window.location.pathname === url) return;
-  history.pushState({ atlasView: 'finance' }, '', url);
+  await showHome({ skipHistory: true });
+  return openAtlasModal('projects');
 }
 
 export async function showFinance({ skipHistory = false } = {}) {
-  _active = false;
-  window.atlasVoiceService?.onRouteChange?.('finance');
-  document.title = 'Finance — Atlas OS';
-  _syncFinanceHistory({ skipHistory });
-  _setAtlasView('finance');
-  _hideShellPanels();
-  stopAtlasCore();
-  _showShellPanel('atlas-finance-panel');
-  _setNavActive('home');
-  _setDockActive('finance');
-  await atlasFinanceModule.renderFinancePanel();
+  await showHome({ skipHistory: true });
+  return openAtlasModal('finance');
 }
 
-export function showAssistantView({ dockId = 'assistant' } = {}) {
-  _active = false;
-  window.atlasVoiceService?.onRouteChange?.('assistant');
-  stopAtlasCore();
-  agentsOfficeModule.stopAgentLines();
-  if (document.title === 'Atlas OS' || document.title.startsWith('Agents Office')) document.title = 'Atlas';
-  _setAtlasView('assistant');
-  _hideShellPanels();
-  _setNavActive('assistant');
-  _setDockActive(dockId);
-  window.sessionModule?.renderSessionList?.();
+export async function showAssistantView({ dockId = 'assistant' } = {}) {
+  await showHome({ skipHistory: true });
+  if (dockId === 'assistant') {
+    return openAtlasModal('assistant');
+  }
+  return openAtlasModal(dockId);
+}
+
+export async function openAtlasModal(id) {
+  _active = true;
+  _ensureHomeVisible();
+  window.atlasVoiceService?.onRouteChange?.('home');
+  document.title = 'Atlas OS';
+  return atlasShellModals.openShellModal(id);
 }
 
 export function getAtlasAgents() {
@@ -539,6 +498,14 @@ function _openAssistant(prompt, opts) {
 }
 
 function _openTool(id) {
+  if (id === 'home') {
+    void showHome();
+    return;
+  }
+  if (id === 'brain') {
+    void openAtlasModal('brain');
+    return;
+  }
   if (_deps.openTool) _deps.openTool(id);
 }
 
@@ -590,15 +557,6 @@ function _bindEvents() {
     });
   }
 
-  const dock = _el('atlas-mc-dock');
-  if (dock) {
-    dock.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-dock-id]');
-      if (!btn) return;
-      _openTool(btn.dataset.dockId);
-    });
-  }
-
   _el('atlas-briefing-speak')?.addEventListener('click', () => { void _speakBriefing(); });
   _el('atlas-briefing-refresh')?.addEventListener('click', async () => {
     await _loadBriefing();
@@ -607,21 +565,28 @@ function _bindEvents() {
   });
   _el('atlas-briefing-details')?.addEventListener('click', () => _openBriefingDetails());
   _el('atlas-desktop-open-cursor')?.addEventListener('click', () => {
-    void _desktopCommand('open_app', { app: 'cursor' });
+    document.getElementById('settings-btn')?.click();
+    import('./settings.js').then(() => {
+      const tab = document.querySelector('[data-settings-tab="desktop"]');
+      tab?.click();
+    });
+    _deps.showToast?.('Configure desktop apps in Settings → Desktop Bridge.');
   });
   _el('atlas-desktop-open-folder')?.addEventListener('click', () => {
     const active = atlasActiveProject.getActiveProjectId?.();
     void _desktopCommand('open_project_in_cursor', { project_id: active || '' });
   });
   _el('atlas-desktop-setup')?.addEventListener('click', () => _openDesktopSetup());
-
-  window.addEventListener('resize', () => {
-    if (_active) updateBriefingTicker();
+  _el('atlas-hq-desktop-open-settings')?.addEventListener('click', () => {
+    document.getElementById('settings-btn')?.click();
+    document.querySelector('[data-settings-tab="desktop"]')?.click();
   });
+
 }
 
 export function initHome(deps = {}) {
   _deps = deps;
+  atlasShellModals.initAtlasShellModals(deps);
   agentsOfficeModule.initAgentsOffice({
     showToast: deps.showToast,
     openAssistant: deps.openAssistant,
@@ -636,17 +601,18 @@ export function initHome(deps = {}) {
   atlasProjectContext.initAtlasProjectContext({
     showToast: deps.showToast,
     openSummary: (id) => atlasProjectsModule.openProjectSummary?.(id),
-    onPinChange: async () => { await loadProjects(); _renderProjects(); },
+    onPinChange: async () => { await loadProjects(); _renderProjects(); refreshAtlasGraph(_projects); },
   });
   atlasProjectHQ.initAtlasProjectHQ({ showToast: deps.showToast });
   atlasDesktopApps.initAtlasDesktopApps({ showToast: deps.showToast });
+  import('./atlasLauncherSettings.js').then((m) => m.default.initAtlasLauncherSettings({ showToast: deps.showToast }));
   atlasReasoningAudit.initAtlasReasoningAudit({ showToast: deps.showToast });
   atlasActiveProject.initAtlasActiveProject({
     navigateAssistant: () => deps.openAssistant?.('', { submit: false }),
   });
   window.atlasPipelineRefresh = () => atlasPipelineModule.renderPipeline();
   _bindEvents();
-  bootAtlasHome();
+  // Home shell boots from app.js _bootAtlasAfterSetup() after the setup wizard gate.
   if (deps.defaultHome && !deps.skipDefaultHome
     && !isAtlasAgentsRoute() && !isAtlasProjectsRoute() && !isAtlasFinanceRoute()) {
     showHome();
@@ -656,12 +622,14 @@ export function initHome(deps = {}) {
 const homeModule = {
   initHome,
   bootAtlasHome,
+  onSetupComplete,
   prefetchAtlasData,
   showHome,
   showAgentsOffice,
   showProjects,
   showFinance,
   showAssistantView,
+  openAtlasModal,
   hideHome,
   isHomeActive,
   loadProjects,

@@ -59,7 +59,7 @@ function _renderWorkspace() {
     badge.classList.toggle('atlas-workspace-mount-badge--ok', mounted);
     badge.classList.toggle('atlas-workspace-mount-badge--warn', !mounted);
   }
-  if (host) host.textContent = _status.host_hint || _workspace.workspace_host_root_hint || 'C:\\AtlasWorkspace';
+  if (host) host.textContent = _status.host_hint || _workspace.workspace_host_root_hint || '—';
   if (container) container.textContent = _status.container_root || _workspace.workspace_container_root || '/workspace';
   if (projectsFolder) {
     projectsFolder.textContent = _status.projects_folder || _workspace.workspace_root || '/workspace/Projects';
@@ -82,7 +82,7 @@ function _renderWorkspace() {
   if (meta) {
     meta.textContent = _workspace.last_scan_at
       ? `Last scan: ${new Date(_workspace.last_scan_at).toLocaleString()}`
-      : 'Last scan: never — create workspace folders, add projects to C:\\AtlasWorkspace\\Projects, then Scan Projects';
+      : 'Last scan: never — create workspace folders, then create or import a project';
   }
   if (discovered) {
     const valid = _projects.filter(p => p.path_status === 'valid');
@@ -118,7 +118,16 @@ function _renderCards() {
   const grid = _el('atlas-projects-grid');
   if (!grid) return;
   if (!_projects.length) {
-    grid.innerHTML = '<p class="atlas-panel-empty">Add project folders to C:\\AtlasWorkspace\\Projects, then Scan Projects.</p>';
+    grid.innerHTML = `
+      <div class="atlas-panel-empty atlas-projects-empty">
+        <p>No projects yet.</p>
+        <div class="atlas-projects-empty-actions">
+          <button type="button" class="atlas-project-btn atlas-project-btn--primary" id="atlas-projects-empty-create">Create Project</button>
+          <button type="button" class="atlas-project-btn" id="atlas-projects-empty-import">Import Project</button>
+        </div>
+      </div>`;
+    _el('atlas-projects-empty-create')?.addEventListener('click', () => _el('atlas-projects-create-btn')?.click());
+    _el('atlas-projects-empty-import')?.addEventListener('click', () => _el('atlas-projects-import-btn')?.click());
     return;
   }
   grid.innerHTML = _projects.map(p => {
@@ -140,6 +149,8 @@ function _renderCards() {
       <header class="atlas-project-card-head">
         <h3 class="atlas-project-card-name">${_esc(p.name)}</h3>
         <span class="atlas-project-index-badge${isIndexed ? ' atlas-project-index-badge--yes' : ' atlas-project-index-badge--no'}">${isIndexed ? 'Indexed' : 'Not indexed'}</span>
+        ${p.officeName ? `<span class="atlas-project-office-pill">${_esc(p.officeName)}</span>` : ''}
+        ${p.storageMode ? `<span class="atlas-project-storage-pill">${_esc(p.storageMode)}</span>` : ''}
         ${isV2 ? '<span class="atlas-project-v2-badge atlas-project-v2-badge--yes">V2</span>' : ''}
       </header>
       ${_pathLine(p)}
@@ -154,7 +165,8 @@ function _renderCards() {
       <div class="atlas-project-card-actions">
         <button type="button" class="atlas-project-btn" data-index-project="${_esc(p.id)}"${p.path_status !== 'valid' ? ' disabled title="Relink or scan first"' : ''}>Index</button>
         <button type="button" class="atlas-project-btn" data-deep-index-project="${_esc(p.id)}"${p.path_status !== 'valid' ? ' disabled title="Relink or scan first"' : ''}>Deep Index</button>
-        <button type="button" class="atlas-project-btn" data-dev-review="${_esc(p.id)}">Developer Review</button>
+        <button type="button" class="atlas-project-btn" data-ask-assistant="${_esc(p.id)}">Ask Assistant</button>
+        <button type="button" class="atlas-project-btn" data-project-review="${_esc(p.id)}">Project Review</button>
         <button type="button" class="atlas-project-btn" data-open-summary="${_esc(p.id)}">Summary</button>
         <button type="button" class="atlas-project-btn atlas-project-btn--primary" data-open-hq="${_esc(p.id)}">HQ</button>
         ${relinkBtn}
@@ -173,15 +185,10 @@ function _fmtBytes(n) {
 
 function _detailActionsHtml(id) {
   return `
-    <button type="button" class="atlas-project-btn" data-detail-ask="${_esc(id)}">Ask in Chat</button>
+    <button type="button" class="atlas-project-btn" data-detail-ask="${_esc(id)}">Ask Assistant</button>
     <button type="button" class="atlas-project-btn" data-index-project="${_esc(id)}">Index</button>
     <button type="button" class="atlas-project-btn" data-deep-index-project="${_esc(id)}">Deep Index</button>
-    <button type="button" class="atlas-project-btn" data-agent-v2="research" data-project-id="${_esc(id)}">Ask Research Agent</button>
-    <button type="button" class="atlas-project-btn" data-agent-v2="business" data-project-id="${_esc(id)}">Ask Business Agent</button>
-    <button type="button" class="atlas-project-btn" data-agent-v2="architect" data-project-id="${_esc(id)}">Ask Architect Agent</button>
-    <button type="button" class="atlas-project-btn" data-agent-v2="developer" data-project-id="${_esc(id)}">Ask Developer Agent</button>
-    <button type="button" class="atlas-project-btn" data-agent-v2="marketing" data-project-id="${_esc(id)}">Ask Marketing Agent</button>
-    <button type="button" class="atlas-project-btn atlas-project-council-btn" data-council-review="${_esc(id)}">Generate Full Council Review</button>
+    <button type="button" class="atlas-project-btn" data-project-review="${_esc(id)}">Generate Project Review</button>
     <button type="button" class="atlas-project-btn" data-open-summary="${_esc(id)}">Open Summary</button>
     <button type="button" class="atlas-project-btn" data-detail-pin="${_esc(id)}">Pin / Unpin</button>
   `;
@@ -301,6 +308,100 @@ async function _saveWorkspace() {
   }
 }
 
+async function _fetchOffices() {
+  try {
+    const res = await fetch('/api/atlas/workspace/offices', { credentials: 'same-origin' });
+    const data = await res.json();
+    return Array.isArray(data.offices) ? data.offices : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function _createManagedProject() {
+  const name = window.prompt('Project name:');
+  if (!name?.trim()) return;
+  const offices = await _fetchOffices();
+  let officeId = offices[0]?.id;
+  if (!officeId) {
+    const officeName = window.prompt('No office found. Create office name:', 'My Office');
+    if (!officeName?.trim()) return;
+    const created = await fetch('/api/atlas/workspace/offices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ name: officeName.trim(), description: '' }),
+    }).then((r) => r.json());
+    officeId = created?.office?.id;
+    if (!officeId) {
+      if (_deps.showToast) _deps.showToast(created?.message || 'Could not create office');
+      return;
+    }
+  }
+  let storageMode = 'managed';
+  try {
+    const settings = await fetch('/api/atlas/workspace/ce/settings', { credentials: 'same-origin' }).then((r) => r.json());
+    storageMode = settings?.settings?.defaultProjectStorage || 'managed';
+  } catch (_) {}
+  const res = await fetch('/api/atlas/workspace/projects/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ name: name.trim(), officeId, storageMode }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    if (_deps.showToast) _deps.showToast(data.message || 'Create failed');
+    return;
+  }
+  _projects = data.projects || _projects;
+  _renderCards();
+  _renderWorkspace();
+  if (_deps.showToast) _deps.showToast(`Created project “${name.trim()}”`);
+  window.dispatchEvent(new CustomEvent('atlas-graph-changed'));
+}
+
+async function _importLinkedProject() {
+  const linkedPath = window.prompt('Full path to existing project folder:');
+  if (!linkedPath?.trim()) return;
+  const name = window.prompt('Project name:', linkedPath.split(/[/\\]/).filter(Boolean).pop() || 'Imported Project');
+  if (!name?.trim()) return;
+  const offices = await _fetchOffices();
+  let officeId = offices[0]?.id;
+  if (!officeId) {
+    const officeName = window.prompt('Create office name:', 'My Office');
+    if (!officeName?.trim()) return;
+    const created = await fetch('/api/atlas/workspace/offices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ name: officeName.trim() }),
+    }).then((r) => r.json());
+    officeId = created?.office?.id;
+    if (!officeId) return;
+  }
+  const res = await fetch('/api/atlas/workspace/projects/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      name: name.trim(),
+      officeId,
+      storageMode: 'linked',
+      linkedPath: linkedPath.trim(),
+    }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    if (_deps.showToast) _deps.showToast(data.message || 'Import failed');
+    return;
+  }
+  _projects = data.projects || _projects;
+  _renderCards();
+  if (_deps.showToast) _deps.showToast('Linked project imported (files stay in place)');
+  window.dispatchEvent(new CustomEvent('atlas-graph-changed'));
+}
+
 async function _bootstrapWorkspace() {
   const res = await fetch('/api/atlas/workspace/bootstrap', {
     method: 'POST',
@@ -400,20 +501,13 @@ function _browseWorkspaceRoot() {
 }
 
 function _openSetupModal() {
-  const modal = _el('atlas-workspace-setup-modal');
-  if (modal) {
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
-  }
+  document.getElementById('settings-btn')?.click();
+  import('./settings.js').then(() => {
+    document.querySelector('[data-settings-tab="storage"]')?.click();
+  });
 }
 
-function _closeSetupModal() {
-  const modal = _el('atlas-workspace-setup-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-  }
-}
+function _closeSetupModal() {}
 
 async function _relinkProject(id) {
   const res = await fetch(`/api/atlas/projects/${id}/relink`, {
@@ -652,6 +746,8 @@ function _bindEvents() {
   _el('atlas-workspace-setup')?.addEventListener('click', _openSetupModal);
   _el('atlas-workspace-auto-discover')?.addEventListener('change', _saveWorkspace);
   _el('atlas-workspace-auto-index')?.addEventListener('change', _saveWorkspace);
+  _el('atlas-projects-create-btn')?.addEventListener('click', () => void _createManagedProject());
+  _el('atlas-projects-import-btn')?.addEventListener('click', () => void _importLinkedProject());
   _el('atlas-projects-add-btn')?.addEventListener('click', () => _showForm());
   _el('atlas-project-form-cancel')?.addEventListener('click', () => _el('atlas-project-form')?.classList.add('hidden'));
   _el('atlas-project-form')?.addEventListener('submit', _saveProject);
@@ -663,8 +759,14 @@ function _bindEvents() {
       if (indexBtn && !indexBtn.disabled) { _indexProject(indexBtn.dataset.indexProject); return; }
       const deepBtn = e.target.closest('[data-deep-index-project]');
       if (deepBtn && !deepBtn.disabled) { _deepIndexProject(deepBtn.dataset.deepIndexProject); return; }
-      const reviewBtn = e.target.closest('[data-dev-review]');
-      if (reviewBtn) { _developerReview(reviewBtn.dataset.devReview); return; }
+      const askAssistBtn = e.target.closest('[data-ask-assistant]');
+      if (askAssistBtn) {
+        const p = _projects.find((x) => x.id === askAssistBtn.dataset.askAssistant);
+        atlasActiveProject.openAssistantWithProject(askAssistBtn.dataset.askAssistant, p?.name);
+        return;
+      }
+      const reviewBtn = e.target.closest('[data-project-review]');
+      if (reviewBtn) { _runCouncilReview(reviewBtn.dataset.projectReview); return; }
       const agentV2Btn = e.target.closest('[data-agent-v2]');
       if (agentV2Btn) {
         _runAgentV2(agentV2Btn.dataset.agentV2, agentV2Btn.dataset.projectId);

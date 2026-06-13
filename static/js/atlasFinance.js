@@ -49,8 +49,8 @@ function _renderOverviewCards() {
       <div class="atlas-finance-card"><span class="atlas-finance-card-label">Week gross</span><span class="atlas-finance-card-value">${_fmt(o.weekly_gross)}</span></div>
       <div class="atlas-finance-card atlas-finance-card--profit"><span class="atlas-finance-card-label">Week net</span><span class="atlas-finance-card-value">${_fmt(o.weekly_net)}</span></div>
     `;
-    if (o.days_until_rent != null) {
-      wrap.insertAdjacentHTML('beforeend', `<div class="atlas-finance-card"><span class="atlas-finance-card-label">Days until rent</span><span class="atlas-finance-card-value">${o.days_until_rent}</span></div>`);
+    if (o.days_until_next_bill != null) {
+      wrap.insertAdjacentHTML('beforeend', `<div class="atlas-finance-card"><span class="atlas-finance-card-label">Next bill due</span><span class="atlas-finance-card-value">${o.days_until_next_bill}d</span></div>`);
     }
   } else {
     const entries = _finance.entries || [];
@@ -78,17 +78,25 @@ function _renderPersonal() {
       `Last week: ${_fmt(o.last_week_total)} · MTD income: ${_fmt(o.month_to_date_income)}`,
     ].join(' · ');
   }
+  const hasBills = (o.upcoming_bills || []).length > 0;
+  const hasWork = (_personal.work_log || []).length > 0;
+  const hasDeductions = (_personal.weekly_deductions || []).some((d) => d.active !== false);
+  const hasGoals = (_overview.goals_count || 0) > 0;
+  const emptyEl = _el('atlas-finance-empty-state');
+  if (emptyEl) {
+    emptyEl.classList.toggle('hidden', hasBills || hasWork || hasDeductions || hasGoals);
+  }
   if (billsEl) {
     const bills = o.upcoming_bills || [];
     billsEl.innerHTML = bills.length
       ? bills.map(b => `<li>${_esc(b.name)} ${_fmt(b.amount)} — ${b.days_until}d (${_esc(b.next_due_date || '')})</li>`).join('')
-      : '<li class="atlas-panel-empty">No upcoming bills</li>';
+      : '<li class="atlas-panel-empty">No bills yet — add income, expenses, or reminders above.</li>';
   }
   if (workEl) {
     const logs = (_personal.work_log || []).slice(-8).reverse();
     workEl.innerHTML = logs.length
       ? logs.map(w => `<li>${_esc(w.date)} · ${_esc(w.type)} · ${_fmt(w.amount)}</li>`).join('')
-      : '<li class="atlas-panel-empty">No work days logged</li>';
+      : '<li class="atlas-panel-empty">No income logged yet.</li>';
   }
 }
 
@@ -215,6 +223,26 @@ function _bindEvents() {
   _el('atlas-finance-project-select')?.addEventListener('change', _renderStrategy);
   _el('atlas-finance-ask-business')?.addEventListener('click', () => _runBusinessAgent('business_analysis'));
   _el('atlas-finance-monetisation-plan')?.addEventListener('click', () => _runBusinessAgent('monetisation_plan'));
+
+  panel.querySelectorAll('[data-finance-quick]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.financeQuick;
+      if (kind === 'goal') {
+        _el('atlas-finance-bill-name')?.focus();
+        import('./atlasGoals.js').then((m) => m.default?.openCreateGoal?.()).catch(() => {});
+        return;
+      }
+      if (kind === 'income') {
+        _el('atlas-finance-work-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        _el('atlas-finance-work-date')?.focus();
+        return;
+      }
+      if (kind === 'expense') {
+        _el('atlas-finance-bill-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        _el('atlas-finance-bill-name')?.focus();
+      }
+    });
+  });
 
   panel.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-save-finance]');

@@ -15,29 +15,41 @@ from src.atlas_config import data_dir
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FULL_DAY_RATE = 134.61
-DEFAULT_HALF_DAY_RATE = 67.305
+DEFAULT_FULL_DAY_RATE = 0.0
+DEFAULT_HALF_DAY_RATE = 0.0
 
 DEFAULT_PERSONAL_FINANCE: Dict[str, Any] = {
     "bills": [],
     "work_log": [],
-    "weekly_deductions": [
-        {
-            "id": "car-rental",
-            "name": "Car Rental",
-            "amount": 75.0,
-            "frequency": "weekly",
-            "active": True,
-            "notes": "Weekly deduction from invoice pay",
-        }
-    ],
+    "weekly_deductions": [],
     "settings": {
-        "full_day_rate": DEFAULT_FULL_DAY_RATE,
-        "half_day_rate": DEFAULT_HALF_DAY_RATE,
-        "payout_weekday": 4,
+        "full_day_rate": 0,
+        "half_day_rate": 0,
+        "payout_weekday": 5,
     },
     "calendar_reminders": [],
 }
+
+_LEGACY_SEED_IDS = frozenset({"car-rental"})
+_LEGACY_RATES = {134.61, 67.305}
+
+
+def _sanitize_legacy_seed(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip bundled demo/personal finance seed data from existing installs."""
+    out = dict(data)
+    deds = out.get("weekly_deductions") or []
+    if isinstance(deds, list):
+        out["weekly_deductions"] = [
+            d for d in deds
+            if isinstance(d, dict) and (d.get("id") or "") not in _LEGACY_SEED_IDS
+        ]
+    settings = dict(out.get("settings") or {})
+    if settings.get("full_day_rate") in _LEGACY_RATES:
+        settings["full_day_rate"] = 0
+    if settings.get("half_day_rate") in _LEGACY_RATES:
+        settings["half_day_rate"] = 0
+    out["settings"] = settings
+    return out
 
 
 def _now_iso() -> str:
@@ -61,7 +73,10 @@ def load_personal_finance() -> Dict[str, Any]:
             return dict(DEFAULT_PERSONAL_FINANCE)
         merged = dict(DEFAULT_PERSONAL_FINANCE)
         merged.update(data)
-        return merged
+        cleaned = _sanitize_legacy_seed(merged)
+        if cleaned != merged:
+            save_personal_finance(cleaned)
+        return cleaned
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("[atlas-finance] personal read failed: %s", exc)
         return dict(DEFAULT_PERSONAL_FINANCE)
@@ -242,7 +257,7 @@ def compute_overview(today: Optional[date] = None) -> Dict[str, Any]:
         })
     upcoming.sort(key=lambda x: x.get("days_until", 9999))
 
-    rent = next((u for u in upcoming if "rent" in (u.get("name") or "").lower()), None)
+    next_bill = upcoming[0] if upcoming else None
     week_start = _week_start(today)
     week_end = _week_end(today)
     month_start = date(today.year, today.month, 1)
@@ -283,8 +298,8 @@ def compute_overview(today: Optional[date] = None) -> Dict[str, Any]:
 
     return {
         "upcoming_bills": upcoming[:12],
-        "days_until_rent": rent.get("days_until") if rent else None,
-        "rent_bill": rent,
+        "days_until_next_bill": next_bill.get("days_until") if next_bill else None,
+        "next_bill": next_bill,
         "weekly_gross": round(week_gross, 2),
         "weekly_deductions": round(week_deductions, 2),
         "weekly_net": round(week_net, 2),

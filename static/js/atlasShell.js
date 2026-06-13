@@ -50,7 +50,21 @@ export function isAtlasShellRoute(path = window.location.pathname) {
 
     || isAtlasProjectsRoute(path)
 
-    || isAtlasFinanceRoute(path);
+    || isAtlasFinanceRoute(path)
+
+    || path === '/assistant'
+
+    || path === '/memory'
+
+    || path === '/tasks'
+
+    || path === '/notes'
+
+    || path === '/calendar'
+
+    || path === '/library'
+
+    || path === '/cookbook';
 
 }
 

@@ -28,10 +28,10 @@ from src.atlas_mount_workspace import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_WORKSPACE: Dict[str, Any] = {
-    "workspace_mode": "docker_mount",
+    "workspace_mode": "managed",
     "workspace_container_root": "/workspace",
-    "workspace_root": "/workspace/Projects",
-    "workspace_host_root_hint": r"C:\AtlasWorkspace",
+    "workspace_root": "",
+    "workspace_host_root_hint": "",
     "allow_project_atlas_folder": False,
     "auto_discover": True,
     "auto_index_on_scan": False,
@@ -79,6 +79,17 @@ def _apply_env_defaults(ws: Dict[str, Any]) -> Dict[str, Any]:
     ws["workspace_container_root"] = container_root()
     if not ws.get("workspace_host_root_hint"):
         ws["workspace_host_root_hint"] = host_root_hint()
+    mode = (ws.get("workspace_mode") or "managed").lower()
+    if mode == "managed":
+        try:
+            from src.atlas_ce_workspace import resolve_workspace_root, projects_scan_roots
+            root = resolve_workspace_root()
+            ws["workspace_host_root_hint"] = str(root)
+            roots = projects_scan_roots(root)
+            ws["workspace_root"] = str(roots[0]) if roots else str(root / "Offices")
+        except Exception:
+            pass
+        return ws
     if is_docker_mount_mode(ws):
         wr = (ws.get("workspace_root") or "").strip()
         pf = projects_folder()
@@ -345,12 +356,36 @@ def scan_workspace(data_dir: Path) -> Dict[str, Any]:
     from src.atlas_project_index import index_projects_batch
 
     ws = load_workspace(data_dir)
-    scan_root = ws.get("workspace_root") or projects_folder()
-    root, err = _resolve_root(scan_root, ws)
-    if err:
-        return {"ok": False, "message": err, "status": get_workspace_status(ws)}
+    mode = (ws.get("workspace_mode") or "managed").lower()
+    if mode == "managed":
+        try:
+            from src.atlas_ce_workspace import discover_ce_projects, get_ce_workspace_status
+            candidates = discover_ce_projects(ws)
+            if not candidates:
+                return {
+                    "ok": True,
+                    "message": "No projects found — create a project or import a folder.",
+                    "workspace": ws,
+                    "status": get_ce_workspace_status(ws),
+                    "discovered": [],
+                    "projects": load_projects(),
+                    "discovered_count": 0,
+                    "indexed_count": 0,
+                    "skipped_count": 0,
+                    "errors": [],
+                }
+        except Exception as exc:
+            logger.warning("[atlas-workspace] CE scan fallback: %s", exc)
+            candidates = []
+    else:
+        candidates = []
 
-    candidates = discover_child_projects(root, ws)
+    if not candidates:
+        scan_root = ws.get("workspace_root") or projects_folder()
+        root, err = _resolve_root(scan_root, ws)
+        if err:
+            return {"ok": False, "message": err, "status": get_workspace_status(ws)}
+        candidates = discover_child_projects(root, ws)
     existing = load_projects()
     merged_projects: List[Dict[str, Any]] = []
     seen_ids = set()

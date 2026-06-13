@@ -2,6 +2,8 @@
 
 import atlasActiveProject from './atlasActiveProject.js';
 import AtlasVoiceContext from './atlasVoiceContext.js';
+import atlasModalWindow from './atlasModalWindow.js';
+import * as modalRegistry from './atlasModalRegistry.js';
 
 let _deps = {};
 let _data = null;
@@ -195,15 +197,33 @@ function _render() {
   });
 }
 
+function _portalHQ(shell) {
+  const portal = _el('atlas-modal-portal');
+  if (portal && shell.parentElement !== portal) {
+    portal.appendChild(shell);
+  }
+}
+
 export async function openProjectHQ(projectId) {
   if (!projectId) return;
   _projectId = projectId;
   const shell = _el('atlas-project-hq');
   if (!shell) return;
 
-  shell.classList.remove('hidden');
-  shell.setAttribute('aria-hidden', 'false');
-  shell.dataset.projectId = projectId;
+  const alreadyOpen = modalRegistry.isModalTrackedOpen('project_hq') && !shell.classList.contains('hidden');
+  if (alreadyOpen) {
+    modalRegistry.raiseModal(shell, 'project_hq');
+    shell.dataset.projectId = projectId;
+  } else {
+    _portalHQ(shell);
+    shell.classList.remove('hidden');
+    shell.classList.add('atlas-shell-panel-active');
+    shell.setAttribute('aria-hidden', 'false');
+    shell.dataset.projectId = projectId;
+    atlasModalWindow.openAtlasModalWindow(shell, 'atlas-project-hq');
+    modalRegistry.raiseModal(shell, 'project_hq');
+    modalRegistry.bindRaiseOnFocus(shell, 'project_hq');
+  }
 
   AtlasVoiceContext.set({
     currentModal: 'project_hq',
@@ -237,9 +257,12 @@ export async function openProjectHQ(projectId) {
 export function closeProjectHQ() {
   const shell = _el('atlas-project-hq');
   if (shell) {
+    atlasModalWindow.deactivateAtlasModal(shell);
     shell.classList.add('hidden');
+    shell.classList.remove('atlas-shell-panel-active');
     shell.setAttribute('aria-hidden', 'true');
   }
+  modalRegistry.trackModalClose('project_hq');
   _data = null;
   _projectId = null;
   if (AtlasVoiceContext.get().currentModal === 'project_hq') {
@@ -334,9 +357,6 @@ function _bindEvents() {
     }
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !shell.classList.contains('hidden')) closeProjectHQ();
-  });
 }
 
 export function initAtlasProjectHQ(deps = {}) {

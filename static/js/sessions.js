@@ -54,6 +54,44 @@ const _researchingSessions = new Set();
 const _streamingSessions = new Set();   // Background chat streams (not polled against research API)
 const _completedSessions = new Set();   // Sessions with completed background streams
 let _researchPollTimer = null;
+const _SESSION_PROBE_KEY = 'ody-session-probe';
+
+function _markSessionProbe(sessionId, kind) {
+  if (!sessionId || !kind) return;
+  try {
+    const raw = sessionStorage.getItem(_SESSION_PROBE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[sessionId] = { ...(map[sessionId] || {}), [kind]: true };
+    sessionStorage.setItem(_SESSION_PROBE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+function _clearSessionProbe(sessionId, kind) {
+  if (!sessionId) return;
+  try {
+    const raw = sessionStorage.getItem(_SESSION_PROBE_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    if (!map[sessionId]) return;
+    if (kind) delete map[sessionId][kind];
+    else delete map[sessionId];
+    if (!Object.keys(map[sessionId] || {}).length) delete map[sessionId];
+    sessionStorage.setItem(_SESSION_PROBE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+function _shouldProbeSessionActivity(sessionId) {
+  if (!sessionId) return false;
+  if (_researchingSessions.has(sessionId) || _streamingSessions.has(sessionId)) return true;
+  try {
+    const raw = sessionStorage.getItem(_SESSION_PROBE_KEY);
+    if (!raw) return false;
+    const flags = JSON.parse(raw)[sessionId];
+    return !!(flags && (flags.research || flags.stream));
+  } catch (_) {
+    return false;
+  }
+}
 
 // Session list keyboard navigation state
 let _sessionListFocused = false;
@@ -1411,15 +1449,32 @@ export async function loadSessions() {
     const onHomeRoute = isAtlasShellRoute();
     const hashId = window.location.hash.replace('#', '');
     let savedId = Storage.get('lastSessionId');
-    // If the persisted lastSessionId points to a transient session (legacy
-    // state from before the persistence-guard was added), drop it.
+    // Drop stale or transient persisted session ids.
     if (savedId) {
       const _saved = activeSessions.find(s => s.id === savedId);
-      if (_saved && _isTransient(_saved)) {
+      if (!_saved || (_saved && _isTransient(_saved))) {
         Storage.remove('lastSessionId');
         savedId = null;
       }
     }
+    if (currentSessionId && !activeSessions.some(s => s.id === currentSessionId)) {
+      currentSessionId = null;
+    }
+    try {
+      const raw = sessionStorage.getItem(_SESSION_PROBE_KEY);
+      if (raw) {
+        const map = JSON.parse(raw);
+        const validIds = new Set(activeSessions.map((s) => s.id));
+        let changed = false;
+        for (const sid of Object.keys(map)) {
+          if (!validIds.has(sid)) {
+            delete map[sid];
+            changed = true;
+          }
+        }
+        if (changed) sessionStorage.setItem(_SESSION_PROBE_KEY, JSON.stringify(map));
+      }
+    } catch (_) {}
     const hasPendingChat = !!_pendingChat;
     let targetId = null;
     // Mission Control routes must not auto-restore a chat session.
@@ -1435,9 +1490,6 @@ export async function loadSessions() {
     } else if (hashId && activeSessions.some(s => s.id === hashId)) {
       targetId = hashId;
     } else if (currentSessionId && activeSessions.some(s => s.id === currentSessionId)) {
-      targetId = currentSessionId;
-    } else if (currentSessionId) {
-      // Session was just created but may not be in the list yet — keep it
       targetId = currentSessionId;
     } else if (savedId && activeSessions.some(s => s.id === savedId)) {
       targetId = savedId;
@@ -1761,9 +1813,11 @@ export async function selectSession(id, { keepSidebar = false, skipHistory = fal
     if (_rBtn) _rBtn.style.display = 'none';
     if (_rChk) _rChk.checked = false;
 
-    // Check for pending/completed research that survived a page refresh
-    if (window.chatModule && window.chatModule.checkPendingResearch) {
-      window.chatModule.checkPendingResearch(id);
+    // Only probe server when this session may have in-flight research/stream work
+    if (_shouldProbeSessionActivity(id)) {
+      if (window.chatModule && window.chatModule.checkPendingResearch) {
+        window.chatModule.checkPendingResearch(id);
+      }
     }
     // Restore group chat state if this is a group session
     if (window.groupModule && window.groupModule.restoreState && window.groupModule.restoreState(id)) {
@@ -1788,8 +1842,9 @@ export async function selectSession(id, { keepSidebar = false, skipHistory = fal
     } catch (e) {
       console.warn('checkBackgroundStream error:', e);
     }
-    // Check server for active stream (survives page refresh)
-    _checkServerStream(id);
+    if (_shouldProbeSessionActivity(id)) {
+      _checkServerStream(id);
+    }
     // Document panel: keep open if next session also wants it, otherwise close
     if (window.documentModule) {
       const docBtn = document.getElementById('overflow-doc-btn');
@@ -2134,6 +2189,7 @@ function _startResearchPolling() {
 
 export function markResearching(sessionId) {
   _researchingSessions.add(sessionId);
+  _markSessionProbe(sessionId, 'research');
   _updateResearchDots();
   _updateRailNotifs();
   _startResearchPolling();
@@ -2141,18 +2197,21 @@ export function markResearching(sessionId) {
 
 export function clearResearching(sessionId) {
   _researchingSessions.delete(sessionId);
+  _clearSessionProbe(sessionId, 'research');
   _updateResearchDots();
   _updateRailNotifs();
 }
 
 export function markStreaming(sessionId) {
   _streamingSessions.add(sessionId);
+  _markSessionProbe(sessionId, 'stream');
   _updateResearchDots();
   _updateRailNotifs();
 }
 
 export function clearStreaming(sessionId) {
   _streamingSessions.delete(sessionId);
+  _clearSessionProbe(sessionId, 'stream');
   _updateResearchDots();
   _updateRailNotifs();
 }
@@ -2160,6 +2219,7 @@ export function clearStreaming(sessionId) {
 export function markStreamComplete(sessionId) {
   _researchingSessions.delete(sessionId);
   _streamingSessions.delete(sessionId);
+  _clearSessionProbe(sessionId);
   // Don't pulse if user is already viewing this session — they can see the response
   if (currentSessionId === sessionId) {
     _updateResearchDots();
@@ -2227,7 +2287,10 @@ async function _checkServerStream(sessionId) {
     if (window.chatModule && window.chatModule.hasActiveStream && window.chatModule.hasActiveStream(sessionId)) return;
 
     const res = await fetch(`${API_BASE}/api/chat/stream_status/${sessionId}`);
-    if (!res.ok) return; // 404 = no active stream
+    if (!res.ok) {
+      _clearSessionProbe(sessionId, 'stream');
+      return;
+    }
     const info = await res.json();
     if (info.status !== 'streaming') return;
 

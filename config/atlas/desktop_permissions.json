@@ -1,35 +1,3 @@
 {
-  "desktop_commands_enabled": false,
-  "require_confirmation": false,
-  "bridge_url": "http://host.docker.internal:8765",
-  "bridge_token": "",
-  "allowed_host_workspace": "C:\\AtlasWorkspace",
-  "allowed_apps": {
-    "cmd": "cmd",
-    "youtube": "youtube",
-    "rocketleague": "rocketleague",
-    "leagueoflegends": "leagueoflegends",
-    "overwatch": "overwatch",
-    "fortnite": "fortnite",
-    "steam": "steam",
-    "discord": "discord",
-    "githubdesktop": "githubdesktop",
-    "vscode": "vscode",
-    "capcut": "capcut",
-    "brave": "brave",
-    "cursor": "cursor",
-    "obs": "obs",
-    "whatsapp": "whatsapp",
-    "spotify": "spotify",
-    "chrome": "chrome",
-    "explorer": "explorer",
-    "powershell": "powershell"
-  },
-  "allowed_actions": [
-    "open_app",
-    "open_folder",
-    "open_project_in_cursor",
-    "open_url",
-    "close_app"
-  ]
+  "allowed_host_workspace": ""
 }

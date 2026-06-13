@@ -217,6 +217,7 @@
   </script>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/themes/atlas-themes.css">
+  <link rel="stylesheet" href="/static/css/atlas-os-home.css">
   <link rel="modulepreload" href="/static/app.js">
   <link rel="modulepreload" href="/static/js/chat.js">
   <link rel="modulepreload" href="/static/js/ui.js">
@@ -972,117 +973,243 @@
       <span id="atlas-status-activity" class="atlas-os-status-meta atlas-os-status-activity" data-state="idle"></span>
       <span id="atlas-status-last" class="atlas-os-status-meta">Last: —</span>
     </div>
-    <div class="atlas-os-status-ticker-wrap">
-      <div class="atlas-ticker" id="atlas-briefing-ticker">
-        <div class="atlas-ticker-track" id="atlas-briefing-ticker-track">
-          <p class="atlas-ticker-text atlas-home-briefing-text" id="atlas-home-briefing-text">Loading briefing…</p>
-          <p class="atlas-ticker-text atlas-ticker-clone" id="atlas-briefing-ticker-clone" aria-hidden="true"></p>
+  </header>
+
+  <canvas id="atlas-power-links" class="atlas-power-links" aria-hidden="true"></canvas>
+  <div id="atlas-globe-hit-layer" class="atlas-globe-hit-layer" aria-hidden="true"></div>
+
+  <section id="atlas-home" class="atlas-home atlas-os-hub" aria-label="Atlas OS Home">
+    <div id="atlas-graph-viewport" class="atlas-graph-viewport">
+      <div id="atlas-globe-stage" class="atlas-globe-stage">
+        <canvas id="atlas-node-connections" class="atlas-node-connections" aria-hidden="true"></canvas>
+        <div class="atlas-mc-globe-bg atlas-globe-shell" id="atlas-core" aria-hidden="true">
+          <canvas id="atlas-core-canvas" class="atlas-core-canvas"></canvas>
+        </div>
+        <div class="atlas-node-ring" id="atlas-node-ring" aria-label="Atlas navigation nodes"></div>
+        <button type="button" id="atlas-brain-core" class="atlas-brain-core" aria-label="Atlas" title="Atlas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- Legacy elements kept for JS compatibility (hidden) -->
+    <div class="atlas-home-legacy" aria-hidden="true">
+      <p id="atlas-home-briefing-text"></p>
+      <p id="atlas-briefing-headline"></p>
+      <ul id="atlas-briefing-priorities"></ul>
+      <p id="atlas-briefing-recommendation"></p>
+      <div id="atlas-home-projects"></div>
+      <div id="atlas-home-agents"></div>
+      <div id="atlas-widget-goals"></div>
+      <div id="atlas-widget-finance-goal"></div>
+      <div id="atlas-widget-notes-preview"></div>
+      <div id="atlas-widget-tasks"></div>
+      <p id="atlas-desktop-control-status"></p>
+      <p id="atlas-desktop-control-meta"></p>
+      <button id="atlas-briefing-speak"></button>
+      <button id="atlas-briefing-refresh"></button>
+      <button id="atlas-briefing-details"></button>
+      <button id="atlas-desktop-open-cursor"></button>
+      <button id="atlas-desktop-open-folder"></button>
+      <button id="atlas-desktop-view-apps"></button>
+      <button id="atlas-desktop-test-cursor"></button>
+      <button id="atlas-desktop-test-browser"></button>
+      <button id="atlas-desktop-setup"></button>
+      <div id="atlas-voice-actions-panel"></div>
+    </div>
+  </section>
+
+  <div id="atlas-setup-wizard" class="atlas-setup-wizard hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-setup-title" aria-hidden="true">
+    <div class="atlas-setup-wizard-card">
+      <nav class="atlas-setup-progress" aria-label="Setup progress">
+        <ol id="atlas-setup-progress-list" class="atlas-setup-progress-list">
+          <li class="atlas-setup-progress-item atlas-setup-progress-item--active" data-step-index="0">Welcome</li>
+          <li class="atlas-setup-progress-item" data-step-index="1">You</li>
+          <li class="atlas-setup-progress-item" data-step-index="2">Office</li>
+          <li class="atlas-setup-progress-item" data-step-index="3">Focus</li>
+          <li class="atlas-setup-progress-item" data-step-index="4">AI</li>
+          <li class="atlas-setup-progress-item" data-step-index="5">Storage</li>
+          <li class="atlas-setup-progress-item" data-step-index="6">Finish</li>
+        </ol>
+      </nav>
+
+      <section class="atlas-setup-step atlas-setup-step--active" data-setup-step="0">
+        <h1 id="atlas-setup-title" class="atlas-setup-title">Welcome to Atlas</h1>
+        <p class="atlas-setup-subtitle">Let's build your AI workspace.</p>
+        <button type="button" id="atlas-setup-start" class="atlas-setup-primary-btn">Start Setup</button>
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="1" hidden>
+        <h2 class="atlas-setup-step-title">Your name</h2>
+        <label class="atlas-setup-label" for="atlas-setup-user-name">Your name</label>
+        <input type="text" id="atlas-setup-user-name" class="atlas-setup-input" autocomplete="name" placeholder="Enter your name" />
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="2" hidden>
+        <h2 class="atlas-setup-step-title">Create your first Office</h2>
+        <label class="atlas-setup-label" for="atlas-setup-office-name">Office name</label>
+        <input type="text" id="atlas-setup-office-name" class="atlas-setup-input" autocomplete="organization" placeholder="Example: My Company, Studio, Personal Lab" />
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="3" hidden>
+        <h2 class="atlas-setup-step-title">What are you building?</h2>
+        <div class="atlas-setup-radio-group">
+          <label><input type="radio" name="atlas-setup-building" value="business" checked /> Business</label>
+          <label><input type="radio" name="atlas-setup-building" value="startup" /> Startup</label>
+          <label><input type="radio" name="atlas-setup-building" value="personal" /> Personal</label>
+          <label><input type="radio" name="atlas-setup-building" value="content" /> Content</label>
+          <label><input type="radio" name="atlas-setup-building" value="development" /> Development</label>
+        </div>
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="4" hidden>
+        <h2 class="atlas-setup-step-title">Choose your AI</h2>
+        <p class="atlas-setup-hint">Default: Local LLM</p>
+        <p class="atlas-setup-sublabel">Model</p>
+        <div class="atlas-setup-radio-group atlas-setup-model-group">
+          <label><input type="radio" name="atlas-setup-model" value="gemma" checked /> Gemma</label>
+          <label><input type="radio" name="atlas-setup-model" value="qwen" /> Qwen</label>
+          <label><input type="radio" name="atlas-setup-model" value="mistral" /> Mistral</label>
+          <label><input type="radio" name="atlas-setup-model" value="gpt-oss" /> GPT OSS</label>
+          <label><input type="radio" name="atlas-setup-model" value="skip" /> Skip for now</label>
+        </div>
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="5" hidden>
+        <h2 class="atlas-setup-step-title">Storage location</h2>
+        <p class="atlas-setup-label">Default workspace folder</p>
+        <code id="atlas-setup-storage-path" class="atlas-setup-storage-path">./AtlasWorkspace</code>
+        <div class="atlas-setup-storage-actions">
+          <button type="button" id="atlas-setup-storage-default" class="atlas-setup-secondary-btn">Use Default</button>
+          <button type="button" id="atlas-setup-storage-change" class="atlas-setup-secondary-btn atlas-setup-secondary-btn--disabled" title="Coming soon" disabled>Change Location</button>
+        </div>
+      </section>
+
+      <section class="atlas-setup-step" data-setup-step="6" hidden>
+        <h2 class="atlas-setup-step-title">Ready to launch</h2>
+        <dl class="atlas-setup-summary" id="atlas-setup-summary">
+          <div><dt>Name</dt><dd id="atlas-setup-summary-name">—</dd></div>
+          <div><dt>Office</dt><dd id="atlas-setup-summary-office">—</dd></div>
+          <div><dt>Building</dt><dd id="atlas-setup-summary-building">—</dd></div>
+          <div><dt>AI model</dt><dd id="atlas-setup-summary-model">—</dd></div>
+          <div><dt>Storage</dt><dd id="atlas-setup-summary-storage">—</dd></div>
+        </dl>
+        <button type="button" id="atlas-setup-finish" class="atlas-setup-primary-btn">Finish Setup</button>
+      </section>
+
+      <footer class="atlas-setup-nav" id="atlas-setup-nav">
+        <button type="button" id="atlas-setup-back" class="atlas-setup-secondary-btn" hidden>Back</button>
+        <button type="button" id="atlas-setup-next" class="atlas-setup-primary-btn" hidden>Continue</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="atlas-shell-modal-backdrop" class="atlas-shell-modal-backdrop hidden" aria-hidden="true"></div>
+  <div id="atlas-modal-portal"></div>
+
+  <div id="atlas-shell-modal-assistant" class="atlas-shell-modal atlas-shell-modal--wide hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-assistant-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-assistant-modal-title">Assistant</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <div class="atlas-shell-modal-body atlas-assistant-modal-body">
+      <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
+        <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" autocomplete="off" />
+        <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </form>
+      <section id="atlas-home-conversation" class="atlas-home-conversation" aria-label="Conversation">
+        <div id="atlas-conv-log" class="atlas-conv-log" role="log" aria-live="polite"></div>
+        <div class="atlas-conv-actions">
+          <button type="button" id="atlas-conv-clear" class="atlas-conv-btn atlas-conv-btn--ghost">Clear</button>
+          <button type="button" id="atlas-conv-open-assistant" class="atlas-conv-btn">Open Full Assistant</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="atlas-shell-modal-offices" class="atlas-shell-modal atlas-shell-modal--wide hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-offices-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-offices-modal-title">Offices</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <div class="atlas-shell-modal-body">
+      <div class="atlas-offices-layout">
+        <aside class="atlas-offices-sidebar">
+          <div id="atlas-offices-list" class="atlas-offices-list"></div>
+          <button type="button" id="atlas-offices-create" class="atlas-offices-add-btn">+ Create Office</button>
+        </aside>
+        <main id="atlas-offices-main" class="atlas-offices-main"></main>
+      </div>
+      <div id="atlas-offices-prompt" class="atlas-offices-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-offices-prompt-title">
+        <div class="atlas-offices-prompt-card">
+          <h3 id="atlas-offices-prompt-title" class="atlas-offices-prompt-title">Create Office</h3>
+          <label id="atlas-offices-prompt-label" class="atlas-offices-prompt-label" for="atlas-offices-prompt-input">Name</label>
+          <input type="text" id="atlas-offices-prompt-input" class="atlas-offices-prompt-input" autocomplete="off" />
+          <label id="atlas-offices-prompt-desc-label" class="atlas-offices-prompt-label hidden" for="atlas-offices-prompt-desc">Description</label>
+          <textarea id="atlas-offices-prompt-desc" class="atlas-offices-prompt-input atlas-offices-prompt-textarea hidden" rows="3"></textarea>
+          <div class="atlas-offices-prompt-actions">
+            <button type="button" id="atlas-offices-prompt-cancel" class="atlas-offices-prompt-btn">Cancel</button>
+            <button type="button" id="atlas-offices-prompt-submit" class="atlas-offices-prompt-btn atlas-offices-prompt-btn--primary">Save</button>
+          </div>
         </div>
       </div>
     </div>
-  </header>
+  </div>
 
-  <section id="atlas-home" class="atlas-home atlas-mc" aria-label="Atlas OS Mission Control">
-    <div class="atlas-mc-globe-bg" id="atlas-core" aria-hidden="true">
-      <canvas id="atlas-core-canvas" class="atlas-core-canvas"></canvas>
+  <div id="atlas-shell-modal-tools" class="atlas-shell-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-tools-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-tools-modal-title">Tools</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <div class="atlas-shell-modal-body">
+      <div id="atlas-tools-grid" class="atlas-tools-grid"></div>
     </div>
-    <div class="atlas-mc-body">
-      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Mission status">
-        <section class="atlas-home-briefing-card atlas-mc-section atlas-mc-section--briefing" id="atlas-home-briefing-card" aria-labelledby="atlas-home-briefing-card-title">
-          <h2 class="atlas-mc-section-title" id="atlas-home-briefing-card-title">Daily Briefing</h2>
-          <p class="atlas-briefing-headline" id="atlas-briefing-headline">Loading…</p>
-          <ul class="atlas-briefing-priorities" id="atlas-briefing-priorities"></ul>
-          <p class="atlas-briefing-recommendation" id="atlas-briefing-recommendation"></p>
-          <div class="atlas-briefing-actions">
-            <button type="button" id="atlas-briefing-speak" class="atlas-briefing-btn">Speak Briefing</button>
-            <button type="button" id="atlas-briefing-refresh" class="atlas-briefing-btn atlas-briefing-btn--ghost">Refresh</button>
-            <button type="button" id="atlas-briefing-details" class="atlas-briefing-btn atlas-briefing-btn--ghost">Open Details</button>
-          </div>
-          <div class="atlas-desktop-control" id="atlas-desktop-control">
-            <p class="atlas-desktop-control-status" id="atlas-desktop-control-status">Desktop Control: Disabled</p>
-            <p class="atlas-desktop-control-meta" id="atlas-desktop-control-meta"></p>
-            <div class="atlas-desktop-control-actions">
-              <button type="button" id="atlas-desktop-open-cursor" class="atlas-briefing-btn" disabled>Open Cursor</button>
-              <button type="button" id="atlas-desktop-open-folder" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Open Project Folder</button>
-              <button type="button" id="atlas-desktop-view-apps" class="atlas-briefing-btn atlas-briefing-btn--ghost">View Apps</button>
-              <button type="button" id="atlas-desktop-test-cursor" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Test Open Cursor</button>
-              <button type="button" id="atlas-desktop-test-browser" class="atlas-briefing-btn atlas-briefing-btn--ghost" disabled>Test Open Browser</button>
-              <button type="button" id="atlas-desktop-setup" class="atlas-briefing-btn atlas-briefing-btn--ghost">Setup Instructions</button>
-            </div>
-          </div>
-        </section>
-        <section class="atlas-mc-section atlas-mc-section--recent">
-          <h2 class="atlas-mc-section-title" id="atlas-home-projects-heading">Recent Projects</h2>
-          <div id="atlas-home-projects" class="atlas-home-projects atlas-home-recent-list"></div>
-        </section>
-        <section class="atlas-mc-section atlas-mc-section--widgets" aria-label="Home widgets">
-          <h2 class="atlas-mc-section-title">Goals</h2>
-          <div id="atlas-widget-goals" class="atlas-home-widget atlas-home-widget--placeholder">
-            <p class="atlas-widget-placeholder-text">Goals — coming soon</p>
-          </div>
-          <div id="atlas-widget-finance-goal" class="atlas-home-widget atlas-home-widget--finance"></div>
-          <div id="atlas-widget-notes-preview" class="atlas-home-widget atlas-home-widget--placeholder">
-            <p class="atlas-widget-placeholder-text">Notes Preview — coming soon</p>
-          </div>
-          <div id="atlas-widget-tasks" class="atlas-home-widget atlas-home-widget--placeholder">
-            <p class="atlas-widget-placeholder-text">Active Tasks / Council Tasks — coming soon</p>
-          </div>
-        </section>
-      </aside>
+  </div>
 
-      <main class="atlas-mc-center">
-        <div id="atlas-mc-center-controls" class="atlas-mc-center-controls">
-          <h1 class="atlas-mc-title">ATLAS OS</h1>
+  <div id="atlas-shell-modal-brain" class="atlas-shell-modal atlas-shell-modal--full hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-brain-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas Core</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-brain-modal-title">Brain</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <nav id="atlas-brain-tabs" class="atlas-brain-tabs" aria-label="Brain sections"></nav>
+    <div id="atlas-brain-sections"></div>
+  </div>
 
-          <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
-            <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" autocomplete="off" />
-            <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            </button>
-          </form>
+  <div id="atlas-shell-modal-voice" class="atlas-shell-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-voice-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas Tools</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-voice-modal-title">Voice Command Cheat Sheet</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <div class="atlas-shell-modal-body" id="atlas-voice-cheatsheet-body"></div>
+  </div>
 
-          <section id="atlas-home-conversation" class="atlas-home-conversation" aria-label="Conversation">
-            <div id="atlas-conv-log" class="atlas-conv-log" role="log" aria-live="polite"></div>
-            <div class="atlas-conv-actions">
-              <button type="button" id="atlas-conv-clear" class="atlas-conv-btn atlas-conv-btn--ghost">Clear</button>
-              <button type="button" id="atlas-conv-open-assistant" class="atlas-conv-btn">Open Full Assistant</button>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      <aside class="atlas-mc-panel atlas-mc-panel-right" aria-labelledby="atlas-home-agents-heading">
-        <h2 class="atlas-mc-section-title" id="atlas-home-agents-heading">Agent Network</h2>
-        <div id="atlas-home-agents" class="atlas-home-agents atlas-home-agents--compact"></div>
-        <details class="atlas-home-voice-ref" open>
-          <summary class="atlas-home-voice-ref-title">Quick Command Reference</summary>
-          <div class="atlas-home-voice-ref-body">
-            <p class="atlas-home-voice-ref-section">VOICE</p>
-            <p>Wake: Hey Atlas / Wake up Atlas / Good morning Atlas</p>
-            <p>Sleep: Atlas standby / Atlas take a break</p>
-            <p class="atlas-home-voice-ref-section">NAVIGATION</p>
-            <p>Prefixes: Move to / Navigate to / Switch to / Go to / Open</p>
-            <p>Targets: Home / Projects / Agents / Finance / Calendar / Settings / Assistant</p>
-            <p class="atlas-home-voice-ref-section">APPLICATIONS</p>
-            <p>Open: Open / Launch / Start / Activate</p>
-            <p>Close: Close / Exit / Quit / Terminate / Stop</p>
-            <p>Examples: Cursor / Browser / Spotify / Discord / OBS / Steam / League</p>
-            <p class="atlas-home-voice-ref-section">BROWSER</p>
-            <p>Open browser on: Google / YouTube / ChatGPT / Supabase / Base44 / GitHub / Reddit</p>
-            <p>Search: Find video about [topic] / Watch video about [topic]</p>
-            <p class="atlas-home-voice-ref-section">PROJECTS</p>
-            <p>Review: Review [project]</p>
-            <p>Open: Open [project] in Cursor / Open [project] folder</p>
-            <p>Council: Run Council Review / Generate Cursor Prompt / Generate Launch Plan / Deep Index Project</p>
-            <p class="atlas-home-voice-ref-section">ATLAS</p>
-            <p>Stop speaking / Repeat / Summarise / Continue / Refresh Workspace</p>
-            <p class="atlas-home-voice-ref-section">CONTEXT ACTIONS</p>
-            <div id="atlas-voice-actions-panel" class="atlas-voice-actions-panel" aria-live="polite"></div>
-          </div>
-        </details>
-      </aside>
+  <div id="atlas-shell-modal-monitor" class="atlas-shell-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-monitor-modal-title">
+    <header class="atlas-shell-modal-header">
+      <span class="atlas-shell-modal-kicker">Atlas Tools</span>
+      <h2 class="atlas-shell-modal-title" id="atlas-monitor-modal-title">System Monitor</h2>
+      <button type="button" class="atlas-shell-modal-close" data-shell-modal-close aria-label="Close">&times;</button>
+    </header>
+    <div class="atlas-shell-modal-body atlas-sysmon-body">
+      <div class="atlas-sysmon-grid">
+        <div class="atlas-sysmon-row" id="atlas-sysmon-fps"><span class="atlas-sysmon-label">FPS</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-heap"><span class="atlas-sysmon-label">Browser memory</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-cpu"><span class="atlas-sysmon-label">CPU</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-ram"><span class="atlas-sysmon-label">RAM</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-uptime"><span class="atlas-sysmon-label">Atlas uptime</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-modals"><span class="atlas-sysmon-label">Active modals</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-voice"><span class="atlas-sysmon-label">Voice status</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-bridge"><span class="atlas-sysmon-label">Desktop bridge</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-backend"><span class="atlas-sysmon-label">Backend metrics</span><span class="atlas-sysmon-value">—</span></div>
+      </div>
+      <p class="atlas-sysmon-note">CPU / RAM connect automatically when the backend exposes <code>/api/atlas/system/metrics</code>.</p>
     </div>
-  </section>
+  </div>
 
   <section id="atlas-agents-office" class="atlas-agents-office atlas-hq hidden" aria-label="Agents Office">
     <header class="atlas-agents-header atlas-hq-header">
@@ -1174,17 +1301,17 @@
   <section id="atlas-projects-panel" class="atlas-os-panel hidden" aria-label="Projects">
     <header class="atlas-os-panel-header">
       <h1 class="atlas-os-panel-title">Projects</h1>
-      <p class="atlas-os-panel-subtitle">Workspace Sync — discover and index project folders read-only</p>
+      <p class="atlas-os-panel-subtitle">Create, import, and manage your projects</p>
     </header>
-    <section class="atlas-workspace-bar" id="atlas-workspace-bar">
+    <section class="atlas-workspace-bar atlas-ce-hidden" id="atlas-workspace-bar" hidden>
       <header class="atlas-workspace-header">
         <h2 class="atlas-workspace-title">Atlas Workspace</h2>
         <span class="atlas-workspace-mount-badge" id="atlas-workspace-mount-badge">Checking…</span>
       </header>
       <div class="atlas-workspace-status-grid">
         <div class="atlas-workspace-status-item">
-          <span class="atlas-workspace-status-label">Host folder (Windows)</span>
-          <code class="atlas-workspace-status-value" id="atlas-workspace-host-hint">C:\AtlasWorkspace</code>
+          <span class="atlas-workspace-status-label">Workspace path</span>
+          <code class="atlas-workspace-status-value" id="atlas-workspace-host-hint">—</code>
         </div>
         <div class="atlas-workspace-status-item">
           <span class="atlas-workspace-status-label">Container path</span>
@@ -1192,7 +1319,7 @@
         </div>
         <div class="atlas-workspace-status-item">
           <span class="atlas-workspace-status-label">Projects folder</span>
-          <code class="atlas-workspace-status-value" id="atlas-workspace-projects-folder">/workspace/Projects</code>
+          <code class="atlas-workspace-status-value" id="atlas-workspace-projects-folder">—</code>
         </div>
       </div>
       <p class="atlas-workspace-warning hidden" id="atlas-workspace-warning"></p>
@@ -1206,7 +1333,9 @@
       </div>
       <div class="atlas-workspace-actions">
         <button type="button" id="atlas-workspace-bootstrap" class="atlas-project-btn">Create Workspace Folders</button>
-        <button type="button" id="atlas-workspace-scan" class="atlas-project-btn atlas-project-btn--primary">Scan Projects</button>
+        <button type="button" id="atlas-projects-create-btn" class="atlas-project-btn atlas-project-btn--primary">+ Create Project</button>
+        <button type="button" id="atlas-projects-import-btn" class="atlas-project-btn">Import Existing Folder</button>
+        <button type="button" id="atlas-workspace-scan" class="atlas-project-btn">Scan Workspace</button>
         <button type="button" id="atlas-workspace-index-all" class="atlas-project-btn">Index All</button>
         <button type="button" id="atlas-workspace-deep-index-all" class="atlas-project-btn">Deep Index All</button>
         <button type="button" id="atlas-run-reasoning-audit" class="atlas-project-btn">Run Reasoning Audit</button>
@@ -1270,25 +1399,6 @@
     </div>
   </div>
 
-  <div id="atlas-workspace-setup-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-workspace-setup-title" aria-hidden="true">
-    <div class="atlas-report-modal-backdrop" data-atlas-setup-close></div>
-    <div class="atlas-report-modal-panel">
-      <header class="atlas-report-modal-header">
-        <h2 class="atlas-report-modal-title" id="atlas-workspace-setup-title">Atlas Workspace Setup</h2>
-        <button type="button" class="atlas-report-modal-close" data-atlas-setup-close aria-label="Close">&times;</button>
-      </header>
-      <div class="atlas-report-modal-body atlas-workspace-setup-body">
-        <ol>
-          <li>Create folder on Windows: <code>C:\AtlasWorkspace</code></li>
-          <li>Put or copy project folders into: <code>C:\AtlasWorkspace\Projects</code></li>
-          <li>Ensure <code>docker-compose.yml</code> mounts <code>C:\AtlasWorkspace:/workspace</code></li>
-          <li>Restart Docker after compose update</li>
-          <li>In Atlas Projects, click <strong>Create Workspace Folders</strong> then <strong>Scan Projects</strong></li>
-        </ol>
-        <p>Atlas scans <code>/workspace/Projects</code> inside the container — each child folder becomes a project. Project indexing is read-only; agent reports save under <code>/workspace/Agents/</code>.</p>
-      </div>
-    </div>
-  </div>
 
   <div id="atlas-project-context-modal" class="atlas-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="atlas-pctx-title" aria-hidden="true">
     <div class="atlas-report-modal-backdrop" data-pctx-close></div>
@@ -1389,15 +1499,14 @@
             <p id="atlas-hq-desktop-status" class="atlas-hq-desktop-status">Desktop bridge disabled</p>
             <p id="atlas-hq-desktop-meta" class="atlas-hq-desktop-meta"></p>
             <ol class="atlas-hq-desktop-steps">
-              <li>Edit desktop_bridge/apps.json for app paths</li>
-              <li>Configure token in desktop_permissions.json</li>
+              <li>Add apps in Settings → Desktop Bridge / App Launcher</li>
+              <li>Configure bridge token in desktop_permissions.json</li>
               <li>Start desktop_bridge.py on Windows</li>
               <li>Enable desktop_commands_enabled</li>
             </ol>
             <div class="atlas-hq-action-row">
               <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-view-apps">View Apps</button>
-              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-test-cursor">Test Open Cursor</button>
-              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-test-browser">Test Open Browser</button>
+              <button type="button" class="atlas-project-btn" id="atlas-hq-desktop-open-settings">App Launcher Settings</button>
               <button type="button" class="atlas-project-btn" data-hq-desktop-setup>Setup Instructions</button>
             </div>
           </section>
@@ -1458,12 +1567,20 @@
       <button type="button" class="atlas-finance-tab" data-finance-tab="project">Project Breakdown</button>
     </div>
     <section id="atlas-finance-personal" class="atlas-finance-tab-panel">
+      <div id="atlas-finance-empty-state" class="atlas-panel-empty atlas-finance-empty-banner">
+        <p>No finance items yet.</p>
+        <div class="atlas-finance-empty-actions">
+          <button type="button" class="atlas-project-btn" data-finance-quick="goal">+ Create Goal</button>
+          <button type="button" class="atlas-project-btn" data-finance-quick="income">+ Add Income</button>
+          <button type="button" class="atlas-project-btn" data-finance-quick="expense">+ Add Expense</button>
+        </div>
+      </div>
       <div class="atlas-finance-personal-grid">
         <article class="atlas-finance-block">
           <h3>Upcoming bills</h3>
           <ul id="atlas-finance-bills-list" class="atlas-finance-list"></ul>
           <form id="atlas-finance-bill-form" class="atlas-finance-mini-form">
-            <input type="text" id="atlas-finance-bill-name" placeholder="Bill name (e.g. Rent)" required />
+            <input type="text" id="atlas-finance-bill-name" placeholder="Bill name" required />
             <input type="number" id="atlas-finance-bill-amount" placeholder="Amount" min="0" step="0.01" required />
             <input type="number" id="atlas-finance-bill-due-day" placeholder="Due day (1-28)" min="1" max="28" />
             <button type="submit" class="atlas-project-btn">Add Bill</button>
@@ -2111,6 +2228,14 @@
           <button class="settings-nav-item" data-settings-tab="integrations">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             <span>Integrations</span>
+          </button>
+          <button class="settings-nav-item settings-nav-item--ce-storage" data-settings-tab="storage">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Storage</span>
+          </button>
+          <button class="settings-nav-item" data-settings-tab="desktop">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+            <span>Desktop Bridge</span>
           </button>
           <button class="settings-nav-item" data-settings-tab="email">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
@@ -2855,6 +2980,65 @@
 
         <!-- ═══ TOOLS TAB ═══ -->
         <!-- ═══ INTEGRATIONS TAB ═══ -->
+        <div data-settings-panel="storage" class="hidden" id="atlas-storage-settings-panel">
+          <div class="admin-card">
+            <h2>Atlas Storage</h2>
+            <div class="admin-toggle-sub" style="margin-bottom:12px">Atlas automatically manages your offices, projects, and files. You only choose where storage lives.</div>
+            <p class="atlas-workspace-meta">Status: <span id="atlas-settings-storage-mounted" class="atlas-workspace-mount-badge">—</span></p>
+            <p class="atlas-workspace-meta">Storage path</p>
+            <p class="atlas-workspace-meta"><code id="atlas-settings-storage-path">—</code></p>
+            <hr style="border:none;border-top:1px solid rgba(80,200,255,0.15);margin:16px 0" />
+            <div class="settings-col">
+              <div class="settings-row">
+                <label class="settings-label">Storage path</label>
+                <input type="text" id="atlas-settings-storage-path-input" class="settings-input" placeholder="./AtlasWorkspace" />
+              </div>
+            </div>
+            <div class="atlas-workspace-actions" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px">
+              <button type="button" id="atlas-settings-storage-browse" class="settings-btn">Browse</button>
+              <button type="button" id="atlas-settings-storage-open-folder" class="settings-btn">Open Folder</button>
+              <button type="button" id="atlas-settings-storage-bootstrap" class="settings-btn">Create Missing Folders</button>
+              <button type="button" id="atlas-settings-storage-save-path" class="settings-btn settings-btn--primary">Save Path</button>
+              <button type="button" id="atlas-settings-storage-backup" class="settings-btn">Backup</button>
+              <button type="button" id="atlas-settings-storage-export" class="settings-btn">Export</button>
+              <button type="button" id="atlas-settings-storage-import" class="settings-btn">Import</button>
+            </div>
+            <hr style="border:none;border-top:1px solid rgba(80,200,255,0.15);margin:20px 0" />
+            <h3 style="margin:0 0 8px;font-size:1rem">Project Storage</h3>
+            <p class="admin-toggle-sub" style="margin-bottom:10px">Default for new projects. Each project can use Atlas Managed or a Linked Folder.</p>
+            <div id="atlas-settings-storage-default-mode" class="settings-col">
+              <label class="settings-row" style="cursor:pointer"><input type="radio" name="atlas-default-project-storage" value="managed" checked /> Atlas Managed (recommended)</label>
+              <label class="settings-row" style="cursor:pointer"><input type="radio" name="atlas-default-project-storage" value="linked" /> Linked Folder</label>
+            </div>
+          </div>
+        </div>
+
+        <div data-settings-panel="desktop" class="hidden" id="atlas-launcher-settings-panel">
+          <div class="admin-card">
+            <h2>Desktop Bridge / App Launcher</h2>
+            <div class="admin-toggle-sub" style="margin-bottom:8px">Configure apps Atlas can launch via voice. Only saved .exe paths are allowed — no arbitrary commands.</div>
+            <p id="atlas-launcher-bridge-status" class="atlas-launcher-bridge-status">Checking bridge…</p>
+            <div id="atlas-launcher-apps-list" class="atlas-launcher-apps-list"></div>
+            <button type="button" class="admin-btn-sm" id="atlas-launcher-add-btn">+ Add app</button>
+          </div>
+          <div class="admin-card">
+            <h3 id="atlas-launcher-form-title">Add desktop app</h3>
+            <div class="settings-col">
+              <div class="settings-row"><label class="settings-label">Display name</label><input type="text" id="atlas-launcher-form-name" class="settings-input" placeholder="Cursor" /></div>
+              <div class="settings-row"><label class="settings-label">App id (optional)</label><input type="text" id="atlas-launcher-form-id" class="settings-input" placeholder="cursor" /></div>
+              <div class="settings-row"><label class="settings-label">Executable path (.exe)</label><input type="text" id="atlas-launcher-form-path" class="settings-input" placeholder="C:\\Path\\To\\App.exe" /></div>
+              <div class="settings-row"><label class="settings-label">Arguments (comma-separated)</label><input type="text" id="atlas-launcher-form-args" class="settings-input" placeholder="" /></div>
+              <div class="settings-row"><label class="settings-label">Working directory (optional)</label><input type="text" id="atlas-launcher-form-workdir" class="settings-input" placeholder="" /></div>
+              <div class="settings-row"><label class="settings-label">Voice aliases (comma-separated)</label><input type="text" id="atlas-launcher-form-aliases" class="settings-input" placeholder="cursor, open cursor, launch cursor" /></div>
+              <label class="settings-row atlas-launcher-toggle"><input type="checkbox" id="atlas-launcher-form-enabled" checked /> Enabled</label>
+              <div style="display:flex;gap:8px;margin-top:8px;">
+                <button type="button" class="admin-btn-add" id="atlas-launcher-save-btn">Save app</button>
+                <button type="button" class="admin-btn-sm" id="atlas-launcher-cancel-btn">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div data-settings-panel="integrations" class="hidden">
           <div class="admin-card">
             <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;opacity:0.6"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</h2>
@@ -2975,6 +3159,7 @@
   </div>
 
   <!-- Toast container (aria-live for screen readers) -->
+  <div id="notification-container" class="notification-container" aria-live="polite" aria-relevant="additions"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 

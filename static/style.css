@@ -3891,10 +3891,34 @@ body.bg-pattern-sparkles {
     .code-runner-output,
     .doc-run-output { padding-right: 110px; }
 
+    .notification-container {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 10px;
+      z-index: 999999;
+      pointer-events: none;
+      max-width: min(360px, calc(100vw - 48px));
+    }
+    .notification-container .toast {
+      position: relative;
+      top: auto;
+      right: auto;
+      left: auto;
+      bottom: auto;
+      transform: translateX(120%);
+    }
+    .notification-container .toast.show { transform: translateX(0); }
+    .notification-container .toast.exiting { transform: translateX(120%); opacity: 0; }
+
     .toast {
       position:fixed;
-      top: 16px; right: 16px;
-      left: auto; bottom: auto;
+      right: 24px;
+      bottom: 24px;
+      top: auto;
+      left: auto;
       background:var(--panel); color:var(--fg);
       border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
       border-left: 3px solid var(--accent);
@@ -3904,7 +3928,7 @@ body.bg-pattern-sparkles {
       transform: translateX(120%);
       transition: opacity .35s cubic-bezier(0.22, 1, 0.36, 1),
                   transform .45s cubic-bezier(0.22, 1, 0.36, 1);
-      z-index: 9999; pointer-events: none;
+      z-index: 999999; pointer-events: none;
       box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       backdrop-filter: blur(12px);
       max-width: min(360px, calc(100vw - 32px));
@@ -3955,17 +3979,23 @@ body.bg-pattern-sparkles {
        Flip it to the top-left so you can still reach the header after an
        archive action. Mirror the slide direction too (enter from left, exit
        to right) so the motion still reads naturally. */
-    body:has(.notes-pane.modal-right-docked) .toast {
-      right: auto;
-      left: 16px;
-      transform: translateX(-120%);
+    body:has(.notes-pane.modal-right-docked) .toast,
+    body:has(.notes-pane.modal-right-docked) .notification-container {
+      right: 24px;
+      left: auto;
+      bottom: 24px;
+      transform: none;
     }
     body:has(.notes-pane.modal-right-docked) .toast.show { transform: translateX(0); }
     body:has(.notes-pane.modal-right-docked) .toast.exiting { transform: translateX(120%); }
     @media (max-width: 768px) {
-      .toast {
-        top: 12px;
+      .notification-container {
         right: 12px;
+        bottom: 12px;
+      }
+      .toast {
+        right: 12px;
+        bottom: 12px;
         max-width: calc(100vw - 24px);
         /* Receive touches so the swipe-to-dismiss gesture works (desktop keeps
            pointer-events:none so the toast never blocks clicks). Horizontal pan
@@ -40592,29 +40622,44 @@ body.atlas-os .hamburger-btn {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 99999;
+  z-index: 2147483647;
   display: none;
 }
 
 .atlas-cursor-fx--active { display: block; }
 
-body.atlas-cursor-fx-on {
+body.atlas-cursor-fx-on .atlas-graph-viewport {
   cursor: none;
 }
 
-body.atlas-cursor-fx-on input,
-body.atlas-cursor-fx-on textarea,
-body.atlas-cursor-fx-on select,
-body.atlas-cursor-fx-on [contenteditable="true"],
-body.atlas-cursor-fx-on .atlas-mc-command-input {
+body.atlas-cursor-fx-on #atlas-modal-portal,
+body.atlas-cursor-fx-on #atlas-modal-portal *,
+body.atlas-cursor-fx-on .atlas-shell-modal,
+body.atlas-cursor-fx-on .atlas-os-panel,
+body.atlas-cursor-fx-on .atlas-os-status-bar,
+body.atlas-cursor-fx-on .atlas-os-status-bar * {
+  cursor: auto;
+}
+
+body.atlas-cursor-fx-on #atlas-modal-portal button,
+body.atlas-cursor-fx-on #atlas-modal-portal a,
+body.atlas-cursor-fx-on .atlas-shell-modal button,
+body.atlas-cursor-fx-on .atlas-shell-modal a,
+body.atlas-cursor-fx-on .atlas-os-panel button,
+body.atlas-cursor-fx-on .atlas-os-panel a {
+  cursor: pointer;
+}
+
+body.atlas-cursor-fx-on #atlas-modal-portal input,
+body.atlas-cursor-fx-on #atlas-modal-portal textarea,
+body.atlas-cursor-fx-on #atlas-modal-portal select,
+body.atlas-cursor-fx-on #atlas-modal-portal [contenteditable="true"] {
   cursor: text;
 }
 
-body.atlas-cursor-fx-on button,
-body.atlas-cursor-fx-on a,
-body.atlas-cursor-fx-on label,
-body.atlas-cursor-fx-on [role="button"] {
-  cursor: none;
+body.window-resizing-active #atlas-modal-portal,
+body.window-resizing-active #atlas-modal-portal * {
+  cursor: inherit !important;
 }
 
 .atlas-cursor-fx-pointer {

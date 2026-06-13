@@ -1188,8 +1188,17 @@ export function openPanel() {
   });
   backdrop.appendChild(pane);
   document.body.appendChild(backdrop);
-  _wireNotesWindow(pane);
-  _restoreNotesSidebarDock(pane);
+  if (isAtlasOs && window.innerWidth > 768) {
+    _clearNotesSnapStyles(pane);
+    pane.classList.add('atlas-notes-centered');
+    backdrop.classList.add('atlas-notes-backdrop-hidden');
+    const portal = document.getElementById('atlas-modal-portal');
+    if (portal) portal.appendChild(pane);
+    import('./atlasModalWindow.js').then((m) => m.default.openAtlasModalWindow(pane, 'notes-pane'));
+  } else {
+    _wireNotesWindow(pane);
+    _restoreNotesSidebarDock(pane);
+  }
 
   // Events
   // (Close chevron removed — swipe down on mobile, tool-rail toggle on desktop.)

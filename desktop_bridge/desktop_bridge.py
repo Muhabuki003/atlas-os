@@ -87,16 +87,31 @@ def _is_allowed_uri(uri: str) -> bool:
 
 
 def _resolve_cmd_exe() -> Optional[str]:
-    res = resolve_app("cmd")
-    if res.get("ok"):
-        return str(res.get("path") or res.get("resolved_target") or "")
+    windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    for candidate in (windir / "System32" / "cmd.exe", windir / "SysWOW64" / "cmd.exe"):
+        if candidate.is_file():
+            return str(candidate.resolve())
     return None
 
 
-def _run_exe(exe: str, args: Optional[List[str]] = None) -> Dict[str, Any]:
+def _resolve_explorer_exe() -> Optional[str]:
+    windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    for candidate in (windir / "explorer.exe", windir / "System32" / "explorer.exe"):
+        if candidate.is_file():
+            return str(candidate.resolve())
+    return None
+
+
+def _run_exe(exe: str, args: Optional[List[str]] = None, cwd: Optional[str] = None) -> Dict[str, Any]:
     cmd = [exe] + (args or [])
+    launch_cwd = None
+    if cwd:
+        try:
+            launch_cwd = str(Path(cwd).resolve()) if Path(cwd).is_dir() else None
+        except OSError:
+            launch_cwd = None
     try:
-        subprocess.Popen(cmd, shell=False)
+        subprocess.Popen(cmd, shell=False, cwd=launch_cwd)
         _log_event({"launch": cmd})
         return {"ok": True, "message": "Command started", "cmd": cmd, "exe": exe}
     except OSError as exc:
@@ -170,7 +185,7 @@ def _taskkill_image(image_name: str) -> Dict[str, Any]:
 def _close_registered_app(app_name: str) -> Dict[str, Any]:
     app_id = (app_name or "").strip().lower()
     if app_id not in _registered_app_ids():
-        return {"ok": False, "message": f"App '{app_id}' is not registered in apps.json."}
+        return {"ok": False, "message": f"App '{app_id}' is not configured. Add it in Settings → Desktop Bridge."}
     resolved = resolve_app(app_id)
     if not resolved.get("ok"):
         return {
@@ -195,7 +210,7 @@ def _close_registered_app(app_name: str) -> Dict[str, Any]:
 def _launch_registered_app(app_name: str) -> Dict[str, Any]:
     app_id = (app_name or "").strip().lower()
     if app_id not in _registered_app_ids():
-        return {"ok": False, "message": f"App '{app_id}' is not registered in apps.json."}
+        return {"ok": False, "message": f"App '{app_id}' is not configured. Add it in Settings → Desktop Bridge."}
 
     resolved = resolve_app(app_id)
     if not resolved.get("ok"):
@@ -218,10 +233,12 @@ def _launch_registered_app(app_name: str) -> Dict[str, Any]:
     if app_type in ("uri", "store_app") and target and _is_allowed_uri(str(target)):
         return _launch_uri(str(target), display)
 
-    if app_type in ("folder_exe", "windows_builtin") and target:
+    if app_type in ("direct_exe", "folder_exe", "windows_builtin") and target:
         exe = str(target)
+        extra_args = [str(a) for a in (app_def.get("args") or []) if str(a).strip()]
+        workdir = (app_def.get("working_directory") or "").strip() or None
         logger.info("Launching %s via %s (%s)", app_id, exe, resolved.get("source"))
-        out = _run_exe(exe)
+        out = _run_exe(exe, extra_args or None, cwd=workdir)
         if out.get("ok"):
             out["message"] = f"Opened {display}."
         out["resolved_path"] = exe
@@ -322,14 +339,13 @@ def run_command(
         path = (args.get("path") or "").strip()
         if not path or not _allowed_path(path):
             return {"ok": False, "message": "Folder path not allowed."}
-        resolved = resolve_app("explorer")
-        if not resolved.get("ok"):
+        exe = _resolve_explorer_exe()
+        if not exe:
             return {
                 "ok": False,
-                "message": resolved.get("message"),
-                "attempted_paths": resolved.get("attempted_paths") or [],
+                "message": "Windows Explorer was not found.",
+                "attempted_paths": [],
             }
-        exe = str(resolved.get("path") or "")
         out = _run_exe(exe, [_norm_win(path)])
         if out.get("ok"):
             out["message"] = "Opened folder in Explorer."

@@ -12,6 +12,50 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 _REGISTRY_PATH = Path(__file__).resolve().parent / "apps.json"
+
+
+def _user_registry_path() -> Optional[Path]:
+    env = (os.environ.get("ATLAS_LAUNCHER_APPS_PATH") or "").strip()
+    if env:
+        return Path(env)
+    root = Path(__file__).resolve().parents[1]
+    candidate = root / "data" / "launcher_apps.json"
+    return candidate if candidate.is_file() else None
+
+
+def invalidate_cache() -> None:
+    global _registry_cache, _alias_index_cache
+    _registry_cache = None
+    _alias_index_cache = None
+
+
+def _user_app_to_registry(app: Dict[str, Any]) -> Dict[str, Any]:
+    exe = (app.get("executablePath") or app.get("executable_path") or app.get("path") or "").strip()
+    return {
+        "id": app.get("id"),
+        "display_name": app.get("name") or app.get("display_name") or app.get("id"),
+        "aliases": app.get("aliases") or [],
+        "type": "direct_exe",
+        "path": exe,
+        "args": app.get("args") or [],
+        "working_directory": app.get("workingDirectory") or app.get("working_directory") or "",
+        "enabled": bool(app.get("enabled", True)),
+    }
+
+
+def _load_user_registry() -> List[Dict[str, Any]]:
+    path = _user_registry_path()
+    if not path:
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        apps = data.get("apps") if isinstance(data, dict) else None
+        if not isinstance(apps, list):
+            return []
+        return [_user_app_to_registry(a) for a in apps if isinstance(a, dict)]
+    except (OSError, json.JSONDecodeError):
+        return []
 _ALLOWED_URI_SCHEMES = frozenset({
     "com.epicgames.launcher",
     "steam",
@@ -82,6 +126,10 @@ def _localappdata() -> Path:
 def load_registry(force_reload: bool = False) -> List[Dict[str, Any]]:
     global _registry_cache
     if _registry_cache is not None and not force_reload:
+        return _registry_cache
+    user_apps = _load_user_registry()
+    if user_apps:
+        _registry_cache = user_apps
         return _registry_cache
     try:
         with open(_REGISTRY_PATH, "r", encoding="utf-8") as f:
@@ -303,13 +351,20 @@ def resolve_app_entry(app: Dict[str, Any]) -> Dict[str, Any]:
     source = ""
     message = ""
 
-    if app_type == "folder_exe":
+    if app_type == "direct_exe":
+        raw_path = _expand_path(app.get("path") or "")
+        if raw_path:
+            attempted.append(raw_path)
+            found = _exists_file(raw_path)
+            if found:
+                target, source = found, raw_path
+            else:
+                message = f"Executable not found: {raw_path}"
+    elif app_type == "folder_exe":
         target, source = _resolve_folder_exe(app, attempted)
         if not target:
             exe = app.get("exe") or "executable"
             message = f"{exe} was not found."
-            if app_id == "cursor":
-                message = "Cursor was not found. Set ATLAS_CURSOR_PATH to your Cursor.exe path."
     elif app_type == "windows_builtin":
         target, source = _resolve_windows_builtin(app, attempted)
         if not target:
@@ -330,7 +385,7 @@ def resolve_app_entry(app: Dict[str, Any]) -> Dict[str, Any]:
         message = f"Unknown app type '{app_type}' for {display}."
 
     available = bool(target)
-    resolved_path = target if app_type in ("folder_exe", "windows_builtin", "store_app") and target and not str(target).endswith(":") else None
+    resolved_path = target if app_type in ("direct_exe", "folder_exe", "windows_builtin", "store_app") and target and not str(target).endswith(":") else None
     if app_type in ("url", "uri", "store_app") and target and (str(target).startswith("http") or ":" in str(target)):
         resolved_path = target
 
@@ -362,7 +417,7 @@ def resolve_app(app_name: str) -> Dict[str, Any]:
             "available": False,
             "path": None,
             "source": "",
-            "message": f"App '{app_id}' is not registered in apps.json.",
+            "message": f"App '{app_id}' is not configured. Add it in Settings → Desktop Bridge.",
             "attempted_paths": [],
         }
     if not app.get("enabled", True):
@@ -373,7 +428,7 @@ def resolve_app(app_name: str) -> Dict[str, Any]:
             "available": False,
             "path": None,
             "source": "",
-            "message": f"{display} is disabled in apps.json. Set enabled: true after configuring the path.",
+            "message": f"{display} is disabled. Enable it in Settings → Desktop Bridge.",
             "attempted_paths": [],
             "enabled": False,
         }

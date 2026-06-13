@@ -293,14 +293,32 @@ function _wireToastSwipe(el) {
   el.addEventListener('touchcancel', endSwipe);
 }
 
+function _notificationContainer() {
+  let container = document.getElementById('notification-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'notification-container';
+    container.className = 'notification-container';
+    container.setAttribute('aria-live', 'polite');
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
+function _spawnToastElement(isError = false) {
+  const el = document.createElement('div');
+  el.className = `toast${isError ? ' error' : ''}`;
+  el.setAttribute('role', 'status');
+  _notificationContainer().appendChild(el);
+  _wireToastSwipe(el);
+  return el;
+}
+
 /**
  * Show success toast message
  */
 export function showToast(msg, durationOrOpts) {
-  if (!toastEl) {
-    toastEl = document.getElementById('toast');
-  }
-  _wireToastSwipe(toastEl);
+  const toastEl = _spawnToastElement(false);
   toastEl.textContent = '';
   toastEl.classList.remove('error');
 
@@ -405,17 +423,10 @@ export function showToast(msg, durationOrOpts) {
   toastEl.classList.add('show');
   clearTimeout(toastEl._hideTimer);
   toastEl._hideTimer = setTimeout(() => {
-    // Add `exiting` so the CSS rule slides it off to the LEFT instead of
-    // back to the right (where it came from). We piggyback on the same
-    // .toast base; .exiting overrides the resting transform.
     toastEl.classList.add('exiting');
     toastEl.classList.remove('show');
-    // Reset pointer-events so an action-toast (which sets it to 'auto'
-    // for its clickable button) doesn't leave the toast intercepting
-    // clicks after it's slid away. Was previously only cleared on the
-    // NEXT plain toast, so a lingering action-toast could appear to
-    // "lock" interaction near the top-right.
     toastEl.style.pointerEvents = '';
+    setTimeout(() => toastEl.remove(), 480);
   }, duration);
 }
 
@@ -423,12 +434,8 @@ export function showToast(msg, durationOrOpts) {
  * Show error toast message
  */
 export function showError(msg) {
-  if (!toastEl) {
-    toastEl = document.getElementById('toast');
-  }
-  _wireToastSwipe(toastEl);
+  const toastEl = _spawnToastElement(true);
   toastEl.textContent = msg;
-  toastEl.classList.add('error');
   toastEl.style.left = '';
   toastEl.style.transform = '';
   toastEl.classList.remove('exiting');
@@ -437,7 +444,8 @@ export function showError(msg) {
   toastEl._hideTimer = setTimeout(() => {
     toastEl.classList.add('exiting');
     toastEl.classList.remove('show');
-  }, 3000);
+    setTimeout(() => toastEl.remove(), 480);
+  }, 5000);
 }
 
 /**

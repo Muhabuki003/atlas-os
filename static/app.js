@@ -1053,9 +1053,7 @@ function initializeEventListeners() {
       setTimeout(_goFullscreen, 50);
       setTimeout(_goFullscreen, 200);
     },
-    '/memory':   () => {
-      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('brain')).catch(() => {});
-    },
+    '/memory':   () => homeModule.openAtlasModal('brain'),
     '/gallery':  () => document.getElementById('tool-gallery-btn')?.click(),
     '/tasks':    () => {
       import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool('tasks')).catch(() => {});
@@ -3308,10 +3306,19 @@ function initializeEventListeners() {
       settingsModule.open();
       return;
     }
-    const overlayTools = ['notes', 'library', 'cookbook', 'calendar', 'brain', 'tasks'];
-    const overlayId = toolId === 'brain' ? 'brain' : toolId;
+    if (toolId === 'brain') {
+      homeModule.openAtlasModal('brain');
+      return;
+    }
+    if (toolId === 'tools') {
+      homeModule.openAtlasModal('tools');
+      return;
+    }
+    const overlayTools = ['notes', 'library', 'cookbook', 'calendar', 'tasks'];
     if (overlayTools.includes(toolId)) {
-      import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool(overlayId)).catch(() => {});
+      homeModule.showHome().then(() => {
+        import('./js/atlasOverlayTools.js').then((m) => m.default.openOverlayTool(toolId)).catch(() => {});
+      });
       return;
     }
     homeModule.showAssistantView({ dockId: toolId });
@@ -3658,11 +3665,27 @@ function initializeEventListeners() {
 // ============================================
 // INITIALIZATION ON PAGE LOAD
 // ============================================
+async function _bootAtlasAfterSetup() {
+  try {
+    const setupMod = await import('./js/atlasSetupWizard.js');
+    setupMod.initAtlasSetupWizard({ showToast: uiModule?.showToast });
+    await setupMod.bootSetupGate({
+      showToast: uiModule?.showToast,
+      onComplete: async () => {
+        await homeModule.onSetupComplete?.();
+      },
+    });
+  } catch (err) {
+    console.warn('[atlas] setup wizard gate failed:', err);
+  }
+  homeModule.bootAtlasHome();
+}
+
 function startOdysseusApp() {
   if (window.__odysseusAppStarted) return;
   window.__odysseusAppStarted = true;
   initAtlasShell();
-  homeModule.bootAtlasHome();
+  void _bootAtlasAfterSetup();
   // Set CSS variables
   document.documentElement.style.setProperty('--line-height', '20px');
 

@@ -12,8 +12,6 @@ import re
 
 import unicodedata
 
-from functools import lru_cache
-
 from pathlib import Path
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -86,25 +84,7 @@ _CLOSE_PREFIX = re.compile(
 
 )
 
-_CLOSE_ALIASES = {
-
-    "browser": "brave",
-
-    "the browser": "brave",
-
-    "web browser": "brave",
-
-    "league": "leagueoflegends",
-
-    "league of legends": "leagueoflegends",
-
-    "lol": "leagueoflegends",
-
-    "rocket league": "rocketleague",
-
-    "rocketleague": "rocketleague",
-
-}
+_CLOSE_ALIASES: Dict[str, str] = {}
 
 
 
@@ -124,61 +104,9 @@ def _normalize(text: str) -> str:
 
 
 
-def _apps_json_path() -> Path:
-
-    return Path(__file__).resolve().parents[1] / "desktop_bridge" / "apps.json"
-
-
-
-
-
-@lru_cache(maxsize=1)
-
-def _load_alias_index() -> Dict[str, str]:
-
-    path = _apps_json_path()
-
-    index: Dict[str, str] = {}
-
-    try:
-
-        with open(path, "r", encoding="utf-8") as f:
-
-            data = json.load(f)
-
-        apps = data.get("apps") if isinstance(data, dict) else []
-
-        if not isinstance(apps, list):
-
-            return index
-
-        for app in apps:
-
-            if not isinstance(app, dict) or not app.get("enabled", True):
-
-                continue
-
-            app_id = (app.get("id") or "").strip().lower()
-
-            if not app_id:
-
-                continue
-
-            index[app_id] = app_id
-
-            for alias in app.get("aliases") or []:
-
-                a = str(alias).strip().lower()
-
-                if a:
-
-                    index[a] = app_id
-
-    except (OSError, json.JSONDecodeError):
-
-        pass
-
-    return index
+def _load_alias_index() -> Dict[str, List[str]]:
+    from src.atlas_launcher_apps import build_alias_index
+    return build_alias_index()
 
 
 
@@ -198,29 +126,14 @@ def _strip_action_prefix(norm: str) -> str:
 
 
 
-def _match_app_alias(text: str) -> Optional[str]:
+def _match_app_aliases(text: str) -> List[str]:
+    from src.atlas_launcher_apps import match_apps
 
     norm = re.sub(r"\s+", " ", (text or "").strip().lower())
-
     if not norm:
-
-        return None
-
-    index = _load_alias_index()
-
-    if norm in index:
-
-        return index[norm]
-
-    matches = [(alias, app_id) for alias, app_id in index.items() if norm == alias]
-
-    if matches:
-
-        matches.sort(key=lambda x: len(x[0]), reverse=True)
-
-        return matches[0][1]
-
-    return None
+        return []
+    apps = match_apps(norm)
+    return [(a.get("id") or "").lower() for a in apps if a.get("id")]
 
 
 
@@ -374,7 +287,9 @@ def parse_desktop_intent(
 
     perms = load_desktop_permissions()
 
-    allowed_apps = {k.lower(): v for k, v in (perms.get("allowed_apps") or {}).items()}
+    from src.atlas_launcher_apps import get_enabled_app_ids
+
+    allowed_apps = {**get_enabled_app_ids(), **{k.lower(): v for k, v in (perms.get("allowed_apps") or {}).items()}}
 
     allowed_actions = set(perms.get("allowed_actions") or [])
 
@@ -504,14 +419,6 @@ def parse_desktop_intent(
 
 
 
-    # play music → Spotify
-
-    if norm in ("play music", "open music"):
-
-        return _hit("open_app", {"app": "spotify"}, "Open Spotify")
-
-
-
     # browser on [site]
 
     m = re.match(r"^(?:open\s+)?browser\s+on\s+(.+)$", norm)
@@ -580,7 +487,8 @@ def parse_desktop_intent(
 
         close_target = norm[close_m.end():].strip()
 
-        app_id = _CLOSE_ALIASES.get(close_target) or _match_app_alias(close_target)
+        close_ids = _match_app_aliases(_CLOSE_ALIASES.get(close_target) or close_target)
+        app_id = close_ids[0] if len(close_ids) == 1 else None
 
         if app_id and app_id in allowed_apps:
 
@@ -598,31 +506,40 @@ def parse_desktop_intent(
 
 
 
-    # open browser (no URL)
+    app_ids = _match_app_aliases(tail)
 
-    if tail in ("browser", "the browser", "web browser"):
+    if len(app_ids) > 1:
+        from src.atlas_launcher_apps import get_app_by_id
+        names = [get_app_by_id(aid).get("name") or aid for aid in app_ids if get_app_by_id(aid)]
+        return {
+            "matched": True,
+            "error": True,
+            "message": f"Multiple apps match '{tail}': {', '.join(names)}. Please say the full app name.",
+            "require_confirmation": False,
+        }
 
-        return _hit("open_app", {"app": "brave"}, "Open Brave browser")
-
-
-
-    app_id = _match_app_alias(tail)
-
-    if app_id:
-
-        display = app_id.replace("githubdesktop", "GitHub Desktop").replace("leagueoflegends", "League of Legends")
-
-        display = display.replace("rocketleague", "Rocket League").replace("vscode", "VS Code")
-
+    if len(app_ids) == 1:
+        app_id = app_ids[0]
+        from src.atlas_launcher_apps import get_app_by_id
+        app = get_app_by_id(app_id) or {}
+        display = app.get("name") or app_id
         label = f"Open {display}"
-
-        if app_id == "youtube":
-
-            return _hit("open_url", {"url": "https://www.youtube.com/"}, "Open YouTube")
-
+        if app_id not in allowed_apps:
+            return {
+                "matched": True,
+                "error": True,
+                "message": f"No app configured for {display}. Add it in Settings → Desktop Bridge.",
+                "require_confirmation": False,
+            }
         return _hit("open_app", {"app": app_id}, label)
 
-
+    if _ACTION_PREFIX.match(norm):
+        return {
+            "matched": True,
+            "error": True,
+            "message": f"No app configured for {tail}. Add it in Settings → Desktop Bridge.",
+            "require_confirmation": False,
+        }
 
     return {"matched": False}
 

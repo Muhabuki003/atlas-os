@@ -4322,7 +4322,10 @@ import { createStreamRenderer } from './streamingRenderer.js';
     if (!sessionId) return;
     try {
       const res = await fetch(`${API_BASE}/api/research/status/${sessionId}`);
-      if (!res.ok) return; // 404 = no research for this session
+      if (!res.ok) {
+        if (sessionModule && sessionModule.clearResearching) sessionModule.clearResearching(sessionId);
+        return;
+      }
       const data = await res.json();
 
       if (data.status === 'done') {

@@ -4,26 +4,44 @@ import atlasActiveProject from './atlasActiveProject.js';
 import atlasOverlayTools from './atlasOverlayTools.js';
 import atlasPersonality from './atlasPersonality.js';
 import { cmdHandled, cmdUnhandled } from './atlasCommandResult.js';
+import officesModal from './officesModal.js';
 
 let _deps = {};
 let _councilStatus = 'IDLE';
 
+// Every target routes through _openModal → homeModule.openAtlasModal →
+// atlasShellModals.openShellModal. Voice MUST use the exact same path as a
+// mouse click on the globe node, so the two can never drift apart again.
 const NAV_TARGETS = {
   home: { label: 'Home', paths: ['/home', '/'], navigate: () => _goHome() },
-  assistant: { label: 'Assistant', paths: ['/assistant'], navigate: () => _goAssistant() },
-  projects: { label: 'Projects', paths: ['/projects'], navigate: () => _goProjects() },
-  agents: { label: 'Agents', paths: ['/agents'], navigate: () => _goAgents() },
-  finance: { label: 'Finance', paths: ['/finance'], navigate: () => _goFinance() },
-  brain: { label: 'Brain', paths: ['/memory'], navigate: () => atlasOverlayTools.openOverlayTool('brain') },
-  tasks: { label: 'Tasks', paths: ['/tasks'], navigate: () => atlasOverlayTools.openOverlayTool('tasks') },
-  calendar: { label: 'Calendar', paths: ['/calendar'], navigate: () => _openCalendar() },
-  notes: { label: 'Notes', paths: ['/notes'], navigate: () => _openNotes() },
-  library: { label: 'Library', paths: ['/library'], navigate: () => _openLibrary() },
-  cookbook: { label: 'Cookbook', paths: ['/cookbook'], navigate: () => _openCookbook() },
-  settings: { label: 'Settings', paths: [], navigate: () => _openSettings() },
+  assistant: { label: 'Assistant', paths: ['/assistant'], navigate: () => _openModal('assistant') },
+  projects: { label: 'Projects', paths: ['/projects'], navigate: () => _openModal('projects') },
+  agents: { label: 'Agents', paths: ['/agents'], navigate: () => _openModal('offices') },
+  offices: { label: 'Offices', paths: ['/agents'], navigate: () => _openModal('offices') },
+  finance: { label: 'Finance', paths: ['/finance'], navigate: () => _openModal('finance') },
+  brain: { label: 'Brain', paths: ['/memory'], navigate: () => _openModal('brain'), aliases: ['memory', 'the brain'] },
+  tasks: { label: 'Tasks', paths: ['/tasks'], navigate: () => _openModal('tasks') },
+  tools: { label: 'Tools', paths: [], navigate: () => _openModal('tools') },
+  calendar: { label: 'Calendar', paths: ['/calendar'], navigate: () => _openModal('calendar') },
+  notes: { label: 'Notes', paths: ['/notes'], navigate: () => _openModal('notes') },
+  library: { label: 'Library', paths: ['/library'], navigate: () => _openModal('library') },
+  cookbook: { label: 'Cookbook', paths: ['/cookbook'], navigate: () => _openModal('cookbook') },
+  settings: { label: 'Settings', paths: [], navigate: () => _openModal('settings') },
+  voice: {
+    label: 'Voice Commands',
+    paths: [],
+    navigate: () => _openModal('voice'),
+    aliases: ['voice command cheat sheet', 'voice cheat sheet', 'voice commands list', 'cheat sheet'],
+  },
+  monitor: {
+    label: 'System Monitor',
+    paths: [],
+    navigate: () => _openModal('monitor'),
+    aliases: ['system monitor', 'sys monitor', 'performance monitor'],
+  },
 };
 
-const NAV_PREFIX = /^(?:(?:hey\s+)?atlas\s+)?(?:(?:can\s+you|could\s+you|please)\s+)?(?:move\s+to|navigate\s+to|switch\s+to|go\s+to|open)\s+/i;
+const NAV_PREFIX = /^(?:(?:hey\s+)?atlas\s+)?(?:(?:can\s+you|could\s+you|please)\s+)?(?:move\s+to|navigate\s+to|switch\s+to|go\s+to|open|launch|start|run)\s+/i;
 
 const DESTRUCTIVE = [
   /\bdelete\b/i,
@@ -42,46 +60,13 @@ async function _goHome() {
   history.pushState({ atlasView: 'home' }, '', '/home');
 }
 
-async function _goAssistant() {
-  window.homeModule?.showAssistantView?.({ dockId: 'assistant' });
-  history.pushState({}, '', '/assistant');
-}
-
-async function _goProjects() {
-  await window.homeModule?.showProjects?.({ skipHistory: false });
-}
-
-async function _goAgents() {
-  await window.homeModule?.showAgentsOffice?.({ skipHistory: false });
-}
-
-async function _goFinance() {
-  await window.homeModule?.showFinance?.({ skipHistory: false });
+async function _openModal(id) {
+  await window.homeModule?.showHome?.({ skipHistory: true });
+  await window.homeModule?.openAtlasModal?.(id);
 }
 
 function _openTool(id) {
   _deps.openTool?.(id);
-}
-
-async function _openCalendar() {
-  await atlasOverlayTools.openOverlayTool('calendar');
-}
-
-async function _openNotes() {
-  await atlasOverlayTools.openOverlayTool('notes');
-}
-
-async function _openLibrary() {
-  await atlasOverlayTools.openOverlayTool('library');
-}
-
-async function _openCookbook() {
-  await atlasOverlayTools.openOverlayTool('cookbook');
-}
-
-function _openSettings() {
-  document.getElementById('settings-btn')?.click()
-    || document.querySelector('[data-open-settings]')?.click();
 }
 
 async function _fetchJson(url, opts = {}) {
@@ -113,6 +98,26 @@ export function isDestructiveCommand(text) {
   return DESTRUCTIVE.some((re) => re.test(t));
 }
 
+/**
+ * True when the text *looks like* an open/navigate command ("open …",
+ * "go to …"). Used as the last step of the voice pipeline: a navigation-shaped
+ * command that nothing recognised gets a quiet notification instead of being
+ * sent to the LLM or surfaced as an error.
+ */
+export function looksLikeNavigationCommand(text) {
+  return NAV_PREFIX.test(_norm(text));
+}
+
+/** Non-blocking "unknown command" notice (toast — never a blocking error). */
+export function notifyUnknownCommand(text) {
+  const short = String(text || '').trim().slice(0, 60);
+  const fn = _deps.showToast || window.uiModule?.showToast;
+  if (fn) {
+    fn(`Unknown command: “${short}” — say “open voice commands” for the list`, 3200);
+  }
+  return cmdHandled(true, 'I don’t know that command yet. Say “open voice commands” to see what I understand.');
+}
+
 export async function tryHandleNavigation(text) {
   const raw = String(text || '').trim();
   let norm = _norm(raw);
@@ -121,18 +126,62 @@ export async function tryHandleNavigation(text) {
   const m = norm.match(NAV_PREFIX);
   if (m) norm = norm.slice(m[0].length).trim();
 
+  if (norm === 'show brain' || norm === 'show the brain') {
+    await _openModal('brain');
+    return cmdHandled(true, atlasPersonality.formatAction('Opening Brain'));
+  }
+
+  if (norm === 'show pending reports' || norm === 'pending reports') {
+    await _openModal('brain');
+    return cmdHandled(true, atlasPersonality.formatAction('Opening pending reports in Brain'));
+  }
+
   for (const [key, cfg] of Object.entries(NAV_TARGETS)) {
-    if (norm === key || norm === cfg.label.toLowerCase()) {
+    const aliases = cfg.aliases || [];
+    if (norm === key || norm === cfg.label.toLowerCase() || aliases.includes(norm)) {
       await cfg.navigate();
-      const isOverlay = atlasOverlayTools.TOOL_IDS.includes(key);
+      const isOverlay = atlasOverlayTools.TOOL_IDS?.includes?.(key);
       return cmdHandled(true, atlasPersonality.formatAction(`Opening ${cfg.label}`), {
         uiAction: isOverlay
           ? { type: 'open_overlay', payload: { tool: key } }
-          : { type: 'navigate', payload: { route: key } },
+          : { type: 'open_modal', payload: { modal: key } },
         uiActivity: `Done: Opening ${cfg.label}`,
       });
     }
   }
+
+  const openOffice = norm.match(/^open\s+office(?:\s+(.+))?$/);
+  if (openOffice) {
+    await _openModal('offices');
+    if (openOffice[1]) {
+      const office = officesModal.openOfficeByName(openOffice[1]);
+      if (!office) {
+        return cmdHandled(true, `Which office would you like to open? Available: ${officesModal.getOffices().map((o) => o.name).join(', ')}`);
+      }
+    }
+    return cmdHandled(true, atlasPersonality.formatAction('Opening Offices'));
+  }
+
+  const openNamed = norm.match(/^(?:open|launch|start|run)\s+(.+)$/);
+  if (openNamed) {
+    const name = openNamed[1];
+    if (officesModal.openAgentByName(name)) {
+      await _openModal('offices');
+      return cmdHandled(true, atlasPersonality.formatAction(`Opening ${name}`));
+    }
+  }
+
+  if (norm === 'create agent' || norm.startsWith('create agent ')) {
+    await _openModal('offices');
+    return cmdHandled(true, 'Use the Offices modal to create a new agent in a department.');
+  }
+
+  const assignAgent = norm.match(/^assign\s+agent\s+to\s+(.+)$/);
+  if (assignAgent) {
+    await _openModal('offices');
+    return cmdHandled(true, `Which department in ${assignAgent[1]}? Reply with the department name.`);
+  }
+
   return cmdUnhandled();
 }
 
@@ -251,6 +300,8 @@ const atlasVoiceNavigation = {
   tryHandleAtlasCommands,
   tryHandleProjectCommands,
   isDestructiveCommand,
+  looksLikeNavigationCommand,
+  notifyUnknownCommand,
   setCouncilStatus,
   getCouncilStatus,
   initAtlasVoiceNavigation,

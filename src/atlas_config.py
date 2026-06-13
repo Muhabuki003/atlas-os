@@ -376,7 +376,7 @@ def generate_briefing() -> Dict[str, Any]:
         workspace_lines.append(mount_status.get("warning") or "Atlas Workspace is not mounted.")
     elif not (ws.get("workspace_root") or "").strip():
         workspace_lines.append(
-            "Configure Atlas Workspace in Projects — put project folders in C:\\AtlasWorkspace\\Projects."
+            "Configure Atlas Workspace in Settings or Projects — create your managed workspace to get started."
         )
     else:
         with_path = [p for p in all_projects if (p.get("path") or "").strip()]

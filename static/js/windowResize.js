@@ -20,6 +20,8 @@
 //     minWidth, minHeight,
 //     storageKey,   // localStorage key to persist {w,h}; null disables
 //     onResizeEnd,  // ({rect}) => void
+//     onResizeStart, // () => void
+//     important,    // use setProperty(..., 'important') for Atlas modals
 //   })
 
 const EDGE = 7;          // px proximity to a border that arms a resize grip
@@ -37,9 +39,16 @@ export function makeWindowResizable(content, options = {}) {
   const minH = options.minHeight || MIN_H;
   const isLocked = options.isLocked || (() => false);
   const onResizeEnd = options.onResizeEnd || null;
+  const onResizeStart = options.onResizeStart || null;
   const storageKey = options.storageKey || null;
+  const important = !!options.important;
 
   const _skip = () => (mobileSkip > 0 && window.innerWidth <= mobileSkip) || isLocked();
+
+  function _setStyle(prop, value) {
+    if (important) content.style.setProperty(prop, value, 'important');
+    else content.style[prop] = value;
+  }
 
   // Which borders is (cx,cy) within EDGE px of? Only counts when the pointer
   // is also within the window's span on the perpendicular axis, so the corners
@@ -95,21 +104,25 @@ export function makeWindowResizable(content, options = {}) {
     // so killing it for this instance is harmless (it replays on next open).
     content.style.animation = 'none';
     content.classList.add('window-resizing');
+    if (onResizeStart) { try { onResizeStart(); } catch (_) {} }
     const r = content.getBoundingClientRect();
     startRect = { left: r.left, top: r.top, width: r.width, height: r.height };
     startX = cx; startY = cy;
     // Pin to fixed with explicit box, same as the drag helper does, so the
     // centering transform / margin stops fighting the new dimensions. Drop the
     // max-width/height caps (e.g. 85vh) so the window can actually grow.
-    content.style.position = 'fixed';
-    content.style.margin = '0';
-    content.style.transform = 'none';
-    content.style.left = r.left + 'px';
-    content.style.top = r.top + 'px';
-    content.style.width = r.width + 'px';
-    content.style.height = r.height + 'px';
-    content.style.maxWidth = 'none';
-    content.style.maxHeight = 'none';
+    _setStyle('position', 'fixed');
+    _setStyle('margin', '0');
+    _setStyle('transform', 'none');
+    _setStyle('right', 'auto');
+    _setStyle('bottom', 'auto');
+    _setStyle('inset', 'auto');
+    _setStyle('left', `${r.left}px`);
+    _setStyle('top', `${r.top}px`);
+    _setStyle('width', `${r.width}px`);
+    _setStyle('height', `${r.height}px`);
+    _setStyle('max-width', 'none');
+    _setStyle('max-height', 'none');
     document.body.classList.add('window-resizing-active');
     document.body.style.cursor = cursorFor(edges);
   }
@@ -132,19 +145,23 @@ export function makeWindowResizable(content, options = {}) {
     if (active.t && top < 0) { height += top; top = 0; }
     if (left + width > vw) width = Math.max(minW, vw - left);
     if (top + height > vh) height = Math.max(minH, vh - top);
-    content.style.left = left + 'px';
-    content.style.top = top + 'px';
-    content.style.width = width + 'px';
-    content.style.height = height + 'px';
+    _setStyle('left', `${left}px`);
+    _setStyle('top', `${top}px`);
+    _setStyle('width', `${width}px`);
+    _setStyle('height', `${height}px`);
   }
 
   function end() {
     if (!resizing) return;
     resizing = false;
+    active = null;
     content.classList.remove('window-resizing');
     document.body.classList.remove('window-resizing-active');
     document.body.style.cursor = '';
     clearHoverCursor();
+    document.querySelectorAll('.window-resizing').forEach((node) => {
+      if (node !== content) node.classList.remove('window-resizing');
+    });
     const r = content.getBoundingClientRect();
     if (storageKey) {
       try { localStorage.setItem(storageKey, JSON.stringify({ w: Math.round(r.width), h: Math.round(r.height) })); } catch (_) {}
@@ -214,6 +231,15 @@ export function makeWindowResizable(content, options = {}) {
   // frame lets that settle so we can re-check _skip() and NOT stretch a
   // docked/fullscreen window to a stale windowed size. The open animation masks
   // the one-frame delay, so there is no visible jump.
+  function forceEnd() {
+    if (resizing) end();
+  }
+
+  window.addEventListener('blur', forceEnd);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) forceEnd();
+  });
+
   if (storageKey) {
     requestAnimationFrame(() => {
       if (_skip() || !content.isConnected) return;
@@ -222,12 +248,18 @@ export function makeWindowResizable(content, options = {}) {
         if (saved && saved.w && saved.h) {
           const w = Math.max(minW, Math.min(saved.w, window.innerWidth));
           const h = Math.max(minH, Math.min(saved.h, window.innerHeight));
-          content.style.width = w + 'px';
-          content.style.height = h + 'px';
-          content.style.maxWidth = 'none';
-          content.style.maxHeight = 'none';
+          _setStyle('width', `${w}px`);
+          _setStyle('height', `${h}px`);
+          _setStyle('max-width', 'none');
+          _setStyle('max-height', 'none');
         }
       } catch (_) {}
     });
   }
+}
+
+/** Clear a stuck document-level resize lock (e.g. missed mouseup). */
+export function clearWindowResizeLock() {
+  document.body.classList.remove('window-resizing-active');
+  document.body.style.cursor = '';
 }

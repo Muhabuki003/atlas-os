@@ -1,8 +1,8 @@
 {
-  "workspace_mode": "docker_mount",
+  "workspace_mode": "managed",
   "workspace_container_root": "/workspace",
-  "workspace_root": "/workspace/Projects",
-  "workspace_host_root_hint": "C:\\AtlasWorkspace",
+  "workspace_root": "",
+  "workspace_host_root_hint": "",
   "allow_project_atlas_folder": false,
   "auto_discover": true,
   "auto_index_on_scan": false,

@@ -354,6 +354,10 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   }
   if (await _applyHandledResult(voiceActionResult, { onComplete, skipUi, speakFn })) return true;
 
+  const navResult = await atlasVoiceNavigation.tryHandleNavigation(msg);
+  cmdDebug('navigation result', navResult);
+  if (await _applyHandledResult(navResult, { onComplete, skipUi, speakFn })) return true;
+
   const desktopResult = await atlasDesktopCommands.handleDesktopMessage(msg, {
     activeProjectId: atlasActiveProject.getActiveProjectId?.(),
     onLog: (role, body, opts = {}) => {
@@ -367,10 +371,6 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   cmdDebug('desktop result', desktopResult);
   if (await _applyHandledResult(desktopResult, { onComplete, skipUi, speakFn: null })) return true;
 
-  const navResult = await atlasVoiceNavigation.tryHandleNavigation(msg);
-  cmdDebug('navigation result', navResult);
-  if (await _applyHandledResult(navResult, { onComplete, skipUi, speakFn })) return true;
-
   const projectResult = await atlasVoiceNavigation.tryHandleProjectCommands(msg);
   cmdDebug('project result', projectResult);
   if (await _applyHandledResult(projectResult, { onComplete, skipUi, speakFn })) return true;
@@ -378,6 +378,14 @@ export async function submitHomeMessage(text, { onComplete, onError, skipUi = fa
   const atlasResult = await atlasVoiceNavigation.tryHandleAtlasCommands(msg);
   cmdDebug('atlas result', atlasResult);
   if (await _applyHandledResult(atlasResult, { onComplete, skipUi, speakFn })) return true;
+
+  // Navigation-shaped command ("open …", "go to …") that nothing recognised:
+  // show a quiet notification instead of sending it to the LLM or erroring.
+  if (atlasVoiceNavigation.looksLikeNavigationCommand(msg)) {
+    const unknownResult = atlasVoiceNavigation.notifyUnknownCommand(msg);
+    cmdDebug('unknown nav command', msg);
+    if (await _applyHandledResult(unknownResult, { onComplete, skipUi, speakFn })) return true;
+  }
 
   if (!skipUi) {
     _pushMessage('atlas', '', { processing: true });

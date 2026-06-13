@@ -122,6 +122,8 @@ function _setup() {
 
   if (!wrap) return;
 
+  document.body.appendChild(wrap);
+
   _glow = wrap.querySelector('.atlas-cursor-fx-glow');
 
   document.body.classList.add('atlas-cursor-fx-on');

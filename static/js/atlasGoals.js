@@ -69,7 +69,11 @@ export async function renderHomeGoals() {
   if (!financeSlot) return;
   try {
     const goals = await _fetchGoals();
-    const finance = goals.find((g) => g.id === 'finance-main' || g.type === 'money') || goals[0];
+    const finance = goals.find((g) => g.id === 'finance-main' || g.type === 'money');
+    if (!finance) {
+      financeSlot.innerHTML = '<p class="atlas-widget-placeholder-text">No finance goals yet. Create your first finance tracker in Finance.</p>';
+      return;
+    }
     _renderFinanceGoal(finance, financeSlot);
   } catch (_) {
     financeSlot.innerHTML = '<p class="atlas-widget-placeholder-text">Finance goal unavailable.</p>';

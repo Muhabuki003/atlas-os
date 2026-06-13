@@ -40,6 +40,15 @@ function initTabs() {
       document.body.classList.toggle('settings-appearance-open', tab === 'appearance');
       syncAppearanceOpacity(tab === 'appearance');
       if (tab === 'ai') refreshAiModelEndpoints();
+      if (tab === 'storage' || tab === 'workspace') {
+        import('./atlasStorageSettings.js').then((m) => {
+          m.default.initAtlasStorageSettings?.();
+          m.default.onStorageSettingsTabShown?.();
+        });
+      }
+      if (tab === 'desktop') {
+        import('./atlasLauncherSettings.js').then((m) => m.default.renderLauncherSettings());
+      }
     });
   });
 }
@@ -5324,6 +5333,7 @@ export function close() {
   } else {
     modalEl.classList.add('hidden');
   }
+  import('./atlasModalRegistry.js').then((m) => m.trackModalClose?.('settings')).catch(() => {});
 }
 
 const settingsModule = { open, close, initIntegrations, initUnifiedIntegrations, syncAdminVisibility, refreshAiModelEndpoints };

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -79,6 +79,56 @@ class WorkspaceSaveRequest(BaseModel):
     workspace_root: str = ""
     auto_discover: bool = True
     auto_index_on_scan: bool = False
+    workspace_mode: Optional[str] = None
+
+
+class CeWorkspaceSettingsRequest(BaseModel):
+    workspacePath: Optional[str] = None
+    workspaceMode: Optional[str] = None
+    defaultProjectStorage: Optional[str] = None
+
+
+class CeSetupCompleteRequest(BaseModel):
+    userName: str = Field(..., min_length=1, max_length=128)
+    officeName: str = Field(..., min_length=1, max_length=128)
+    buildingType: str = "personal"
+    aiProvider: str = "local"
+    aiModel: str = "gemma"
+    workspacePath: Optional[str] = None
+    storagePath: Optional[str] = None
+    createFirstEmployee: bool = False
+    createEmployee: bool = False
+
+
+class CeOfficeCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = ""
+
+
+class CeDepartmentCreateRequest(BaseModel):
+    officeId: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = ""
+
+
+class CeAgentCreateRequest(BaseModel):
+    officeId: str = Field(..., min_length=1, max_length=64)
+    departmentId: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+
+
+class CeProjectCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = ""
+    officeId: str = Field(..., min_length=1, max_length=64)
+    departmentId: Optional[str] = None
+    storageMode: str = "managed"
+    linkedPath: Optional[str] = None
+
+
+class CeMigrateRequest(BaseModel):
+    officeName: str = Field(..., min_length=1, max_length=128)
+    mode: str = "copy"
 
 
 class ReportActionRequest(BaseModel):
@@ -160,7 +210,11 @@ def setup_atlas_routes() -> APIRouter:
     @router.get("/profile")
     async def get_atlas_profile(request: Request):
         get_current_user(request)
-        return load_profile_bundle()
+        try:
+            return load_profile_bundle()
+        except Exception as exc:
+            logger.exception("[atlas] profile failed: %s", exc)
+            return {"identity": {}, "profile": {}}
 
     @router.get("/workspace")
     async def get_atlas_workspace(request: Request):
@@ -188,11 +242,243 @@ def setup_atlas_routes() -> APIRouter:
     @router.post("/workspace/bootstrap")
     async def bootstrap_atlas_workspace(request: Request):
         get_current_user(request)
-        result = bootstrap_workspace_folders()
+        from src.atlas_ce_workspace import ensure_workspace_bootstrap
+        result = ensure_workspace_bootstrap()
         ws = load_workspace(data_dir())
+        if not ws.get("workspace_host_root_hint"):
+            ws["workspace_host_root_hint"] = result.get("root", "")
+            ws["workspace_mode"] = "managed"
+            save_workspace(data_dir(), ws)
         result["workspace"] = ws
         result["status"] = get_workspace_status(ws)
         return result
+
+    @router.get("/workspace/ce/settings")
+    async def get_ce_workspace_settings(request: Request):
+        get_current_user(request)
+        from src.atlas_ce_workspace import load_system_settings, get_ce_workspace_status
+        return {
+            "ok": True,
+            "settings": load_system_settings(),
+            "status": get_ce_workspace_status(),
+        }
+
+    @router.get("/setup/status")
+    async def get_atlas_setup_status(request: Request):
+        get_current_user(request)
+        try:
+            from src.atlas_ce_workspace import get_ce_setup_status
+            return get_ce_setup_status()
+        except Exception as exc:
+            logger.exception("[atlas] setup status failed")
+            return {
+                "ok": False,
+                "setupComplete": False,
+                "workspaceExists": False,
+                "settingsExists": False,
+                "officeCount": 0,
+                "shouldShowWizard": True,
+                "workspacePath": "./AtlasWorkspace",
+                "needsSetup": True,
+                "message": str(exc),
+            }
+
+    @router.post("/setup/complete")
+    async def complete_atlas_setup(request: Request, body: CeSetupCompleteRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import complete_ce_setup
+        try:
+            return complete_ce_setup(
+                user_name=body.userName,
+                office_name=body.officeName,
+                building_type=body.buildingType,
+                ai_provider=body.aiProvider,
+                ai_model=body.aiModel,
+                workspace_path=body.workspacePath or body.storagePath,
+                storage_path=body.storagePath,
+                create_first_employee=body.createFirstEmployee or body.createEmployee,
+                create_employee=body.createEmployee,
+            )
+        except Exception as exc:
+            logger.exception("[atlas] setup failed")
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+
+    @router.post("/setup/reset")
+    async def reset_atlas_setup(request: Request):
+        get_current_user(request)
+        from src.atlas_ce_workspace import is_atlas_dev_mode, reset_ce_setup
+        if not is_atlas_dev_mode():
+            return JSONResponse(
+                {"ok": False, "message": "Setup reset is only available when ATLAS_DEV_MODE=true"},
+                status_code=403,
+            )
+        return reset_ce_setup()
+
+    @router.post("/storage/backup")
+    async def backup_atlas_storage(request: Request):
+        get_current_user(request)
+        from src.atlas_ce_workspace import ensure_workspace_bootstrap, resolve_workspace_root
+        root = resolve_workspace_root()
+        ensure_workspace_bootstrap(root)
+        backup_dir = root / "System" / "Backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        manifest = backup_dir / f"backup-{stamp}.json"
+        from src.atlas_ce_workspace import export_storage_manifest
+        import json
+        manifest.write_text(json.dumps(export_storage_manifest(root), indent=2), encoding="utf-8")
+        return {"ok": True, "message": f"Backup saved to {manifest.name}", "path": str(manifest)}
+
+    @router.get("/storage/export")
+    async def export_atlas_storage(request: Request):
+        get_current_user(request)
+        from src.atlas_ce_workspace import export_storage_manifest
+        import json
+        from fastapi.responses import Response
+        payload = export_storage_manifest()
+        return Response(
+            content=json.dumps(payload, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="atlas-storage-export.json"'},
+        )
+
+    @router.post("/storage/import")
+    async def import_atlas_storage(request: Request):
+        get_current_user(request)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "message": "Invalid JSON"}, status_code=400)
+        from src.atlas_ce_workspace import save_system_settings
+        settings = body.get("settings") if isinstance(body, dict) else None
+        if not isinstance(settings, dict):
+            return JSONResponse({"ok": False, "message": "No settings object in import file"}, status_code=400)
+        save_system_settings(settings)
+        return {"ok": True, "message": "Storage settings imported"}
+
+    @router.put("/workspace/ce/settings")
+    async def put_ce_workspace_settings(request: Request, body: CeWorkspaceSettingsRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import save_system_settings, ensure_workspace_bootstrap, resolve_workspace_root
+        patch = body.model_dump(exclude_none=True)
+        settings = save_system_settings(patch)
+        if patch.get("workspacePath"):
+            ensure_workspace_bootstrap(resolve_workspace_root(patch["workspacePath"]))
+        ws = load_workspace(data_dir())
+        if body.workspaceMode:
+            ws["workspace_mode"] = body.workspaceMode
+            save_workspace(data_dir(), ws)
+        return {"ok": True, "settings": settings, "status": get_workspace_status(ws)}
+
+    @router.post("/workspace/ce/migrate")
+    async def migrate_ce_workspace(request: Request, body: CeMigrateRequest):
+        get_current_user(request)
+        return JSONResponse(
+            {"ok": False, "message": "Legacy migration is not available in Community Edition"},
+            status_code=410,
+        )
+
+    @router.get("/workspace/offices")
+    async def list_workspace_offices(request: Request):
+        get_current_user(request)
+        try:
+            from src.atlas_ce_workspace import load_offices
+            return {"ok": True, "offices": load_offices()}
+        except Exception as exc:
+            logging.getLogger(__name__).exception("list_workspace_offices failed")
+            return {"ok": True, "offices": [], "warning": str(exc)}
+
+    @router.post("/workspace/offices")
+    async def create_workspace_office(request: Request, body: CeOfficeCreateRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import create_office
+        try:
+            office = create_office(body.name, body.description)
+            return {"ok": True, "office": office}
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+
+    @router.post("/workspace/departments")
+    async def create_workspace_department(request: Request, body: CeDepartmentCreateRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import create_department
+        try:
+            dept = create_department(body.officeId, body.name, body.description)
+            return {"ok": True, "department": dept}
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+
+    @router.delete("/workspace/offices/{office_id}")
+    async def delete_workspace_office(request: Request, office_id: str):
+        get_current_user(request)
+        from src.atlas_ce_workspace import delete_office
+        result = delete_office(office_id)
+        if not result.get("ok"):
+            return JSONResponse(result, status_code=404)
+        return result
+
+    @router.delete("/workspace/departments/{department_id}")
+    async def delete_workspace_department(
+        request: Request,
+        department_id: str,
+        officeId: str = Query(..., min_length=1, max_length=64),
+    ):
+        get_current_user(request)
+        from src.atlas_ce_workspace import delete_department
+        result = delete_department(officeId, department_id)
+        if not result.get("ok"):
+            return JSONResponse(result, status_code=404)
+        return result
+
+    @router.post("/workspace/agents")
+    async def create_workspace_agent(request: Request, body: CeAgentCreateRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import create_agent
+        try:
+            agent = create_agent(body.officeId, body.departmentId, body.name)
+            return {"ok": True, "agent": agent}
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+
+    @router.post("/workspace/projects/create")
+    async def create_workspace_project(request: Request, body: CeProjectCreateRequest):
+        get_current_user(request)
+        from src.atlas_ce_workspace import create_project
+        from src.atlas_config import load_projects, save_projects
+        from src.atlas_mount_workspace import enrich_project
+        try:
+            project = create_project(
+                body.name,
+                body.officeId,
+                description=body.description,
+                department_id=body.departmentId,
+                storage_mode=body.storageMode or "managed",
+                linked_path=body.linkedPath,
+            )
+            ws = load_workspace(data_dir())
+            projects = load_projects()
+            entry = enrich_project({
+                "id": project["id"],
+                "name": project["name"],
+                "path": project.get("path") or project.get("linkedPath") or "",
+                "description": project.get("description", ""),
+                "officeId": project.get("officeId"),
+                "departmentId": project.get("departmentId"),
+                "officeName": project.get("officeName"),
+                "storageMode": project.get("storageMode", "managed"),
+                "workspacePath": project.get("workspacePath"),
+                "linkedPath": project.get("linkedPath"),
+                "source": "manual",
+                "status": "active",
+                "priority": "medium",
+                "agents_allowed": True,
+                "created_at": project.get("createdAt"),
+            }, ws)
+            projects.append(entry)
+            save_projects(projects)
+            return {"ok": True, "project": entry, "projects": projects}
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
 
     @router.post("/workspace/scan")
     async def scan_atlas_workspace(request: Request):
@@ -554,12 +840,43 @@ def setup_atlas_routes() -> APIRouter:
     @router.get("/briefing")
     async def get_atlas_briefing(request: Request):
         get_current_user(request)
-        return generate_briefing()
+        try:
+            return generate_briefing()
+        except Exception as exc:
+            logger.exception("[atlas] briefing failed: %s", exc)
+            return {
+                "ok": True,
+                "greeting": "Atlas is online.",
+                "focus": "",
+                "lines": [],
+                "spoken": "Atlas is online.",
+            }
 
     @router.get("/briefing/v2")
     async def get_atlas_briefing_v2(request: Request):
         get_current_user(request)
-        return generate_briefing_v2()
+        try:
+            return generate_briefing_v2()
+        except Exception as exc:
+            logger.exception("[atlas] briefing v2 failed: %s", exc)
+            return {
+                "ok": True,
+                "spoken": "Atlas is online.",
+                "visual": {
+                    "headline": "Atlas is online",
+                    "greeting": "Atlas is online.",
+                    "priorities": [],
+                    "project_changes": [],
+                    "finance": [],
+                    "agent_reports": [],
+                    "recommendation": "Scan your workspace to get started.",
+                    "workspace_mounted": False,
+                    "unindexed_count": 0,
+                    "indexed_count": 0,
+                    "project_count": 0,
+                },
+                "council_note": "",
+            }
 
     @router.get("/briefing/settings")
     async def get_briefing_settings(request: Request):
@@ -800,6 +1117,59 @@ def setup_atlas_routes() -> APIRouter:
     async def post_desktop_command(request: Request, body: DesktopCommandRequest):
         get_current_user(request)
         return await queue_desktop_command(body.command, body.args)
+
+    @router.get("/desktop/launcher-apps")
+    async def get_launcher_apps(request: Request):
+        get_current_user(request)
+        from src.atlas_launcher_apps import list_launcher_apps
+        return list_launcher_apps()
+
+    @router.post("/desktop/launcher-apps")
+    async def post_launcher_app(request: Request):
+        get_current_user(request)
+        from src.atlas_launcher_apps import add_launcher_app
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return add_launcher_app(body if isinstance(body, dict) else {})
+
+    @router.put("/desktop/launcher-apps/{app_id}")
+    async def put_launcher_app(app_id: str, request: Request):
+        get_current_user(request)
+        from src.atlas_launcher_apps import update_launcher_app
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return update_launcher_app(app_id, body if isinstance(body, dict) else {})
+
+    @router.delete("/desktop/launcher-apps/{app_id}")
+    async def delete_launcher_app(app_id: str, request: Request):
+        get_current_user(request)
+        from src.atlas_launcher_apps import delete_launcher_app
+        return delete_launcher_app(app_id)
+
+    @router.post("/desktop/launcher-apps/{app_id}/test")
+    async def test_launcher_app(app_id: str, request: Request):
+        get_current_user(request)
+        from src.atlas_launcher_apps import get_app_by_id
+        app = get_app_by_id(app_id)
+        if not app:
+            return {"ok": False, "message": f"App '{app_id}' not found."}
+        if not app.get("enabled", True):
+            return {"ok": False, "message": f"{app.get('name') or app_id} is disabled."}
+        return await queue_desktop_command("open_app", {"app": app_id})
+
+    @router.post("/ce/wipe-personal-data")
+    async def post_ce_wipe_personal_data(request: Request):
+        get_current_user(request)
+        try:
+            from src.atlas_ce_wipe import wipe_all_personal_data
+            return wipe_all_personal_data()
+        except Exception as exc:
+            logger.exception("[atlas] ce wipe failed")
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=500)
 
     @router.get("/audit/reasoning")
     async def get_reasoning_audit(request: Request):

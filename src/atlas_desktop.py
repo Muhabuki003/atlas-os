@@ -27,27 +27,7 @@ _DEFAULTS: Dict[str, Any] = {
     "bridge_url": "http://host.docker.internal:8765",
     "bridge_token": "",
     "allowed_host_workspace": r"C:\AtlasWorkspace",
-    "allowed_apps": {
-        "cmd": "cmd",
-        "youtube": "youtube",
-        "rocketleague": "rocketleague",
-        "leagueoflegends": "leagueoflegends",
-        "overwatch": "overwatch",
-        "fortnite": "fortnite",
-        "steam": "steam",
-        "discord": "discord",
-        "githubdesktop": "githubdesktop",
-        "vscode": "vscode",
-        "capcut": "capcut",
-        "brave": "brave",
-        "cursor": "cursor",
-        "obs": "obs",
-        "whatsapp": "whatsapp",
-        "spotify": "spotify",
-        "chrome": "chrome",
-        "explorer": "explorer",
-        "powershell": "powershell",
-    },
+    "allowed_apps": {},
     "allowed_actions": [
         "open_app",
         "open_folder",
@@ -74,12 +54,9 @@ def load_desktop_permissions() -> Dict[str, Any]:
         out = dict(_DEFAULTS)
         out.update(data)
         if isinstance(data.get("allowed_apps"), list):
-            apps = {a: "" for a in data["allowed_apps"]}
-            out["allowed_apps"] = {**_DEFAULTS["allowed_apps"], **apps}
+            out["allowed_apps"] = {a: a for a in data["allowed_apps"]}
         elif isinstance(data.get("allowed_apps"), dict):
-            merged = dict(_DEFAULTS["allowed_apps"])
-            merged.update(data["allowed_apps"])
-            out["allowed_apps"] = merged
+            out["allowed_apps"] = dict(data["allowed_apps"])
         return out
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("[atlas-desktop] could not read permissions: %s", exc)
@@ -209,12 +186,40 @@ async def _bridge_apps_data(perms: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 async def desktop_apps() -> Dict[str, Any]:
+    from src.atlas_launcher_apps import list_launcher_apps
+
     perms = load_desktop_permissions()
+    local = list_launcher_apps()
     if not _bridge_configured(perms):
-        return {"ok": False, "message": "Bridge not configured.", "apps": {}}
+        apps = {
+            (a.get("id") or "").lower(): {
+                "id": a.get("id"),
+                "display_name": a.get("name"),
+                "available": bool(a.get("pathExists")),
+                "path": a.get("executablePath"),
+                "aliases": a.get("aliases") or [],
+                "message": a.get("pathMessage") or "",
+                "enabled": a.get("enabled", True),
+            }
+            for a in local.get("apps") or []
+            if a.get("id")
+        }
+        return {
+            "ok": True,
+            "message": "Bridge not configured. Showing saved launcher apps only.",
+            "apps": apps,
+            "app_count": len(apps),
+            "available_apps": [k for k, v in apps.items() if v.get("available")],
+            "missing_apps": [k for k, v in apps.items() if not v.get("available")],
+        }
     data = await _bridge_apps_data(perms)
     if not data:
-        return {"ok": False, "message": "Could not reach desktop bridge.", "apps": {}}
+        return {
+            "ok": False,
+            "message": "Could not reach desktop bridge.",
+            "apps": {},
+            "launcher_apps": local.get("apps") or [],
+        }
     return data
 
 
@@ -263,11 +268,11 @@ async def desktop_status() -> Dict[str, Any]:
         "available_apps": (bridge_health or {}).get("available_apps") if bridge_health else None,
         "missing_apps": (bridge_health or {}).get("missing_apps") if bridge_health else None,
         "setup_hint": (
-            "1. Edit desktop_bridge/apps.json for app paths (or set ATLAS_CURSOR_PATH)\n"
+            "1. Add desktop apps in Settings → Desktop Bridge / App Launcher\n"
             "2. Set bridge_token in desktop_permissions.json\n"
             "3. Run desktop_bridge.py on Windows (http://127.0.0.1:8765)\n"
             "4. Enable desktop_commands_enabled\n"
-            "5. Use View Apps to verify resolution, then test Open Cursor"
+            "5. Use Test Launch to verify each app path"
         ),
     }
 
@@ -333,18 +338,28 @@ async def queue_desktop_command(command: str, args: Dict[str, Any] | None = None
 
     bridge_payload: Dict[str, Any] = {"command": cmd, "args": payload_args}
 
+    from src.atlas_launcher_apps import get_app_by_id, get_enabled_app_ids
+
+    enabled_apps = get_enabled_app_ids()
+    manual_allowed = {k.lower(): v for k, v in (perms.get("allowed_apps") or {}).items()}
+    allowed_apps = {**enabled_apps, **manual_allowed}
+
     if cmd == "open_app":
         app = (payload_args.get("app") or "").strip().lower()
-        allowed_apps = perms.get("allowed_apps") or {}
         if app not in allowed_apps:
-            return {"ok": False, "message": f"App '{app}' is not whitelisted."}
+            return {"ok": False, "message": f"No app configured for '{app}'. Add it in Settings → Desktop Bridge."}
+        launcher_app = get_app_by_id(app)
+        if launcher_app:
+            from src.atlas_launcher_apps import validate_executable
+            ok, msg = validate_executable(launcher_app.get("executablePath") or "")
+            if not ok:
+                return {"ok": False, "message": msg}
         bridge_payload["args"] = {"app": app, "launcher": allowed_apps.get(app) or app}
 
     elif cmd == "close_app":
         app = (payload_args.get("app") or "").strip().lower()
-        allowed_apps = perms.get("allowed_apps") or {}
         if app not in allowed_apps:
-            return {"ok": False, "message": f"App '{app}' is not whitelisted."}
+            return {"ok": False, "message": f"No app configured for '{app}'. Add it in Settings → Desktop Bridge."}
         bridge_payload["args"] = {"app": app}
 
     elif cmd == "open_folder":
