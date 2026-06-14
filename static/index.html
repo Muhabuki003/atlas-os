@@ -1206,6 +1206,7 @@
         <div class="atlas-sysmon-row" id="atlas-sysmon-voice"><span class="atlas-sysmon-label">Voice status</span><span class="atlas-sysmon-value">—</span></div>
         <div class="atlas-sysmon-row" id="atlas-sysmon-bridge"><span class="atlas-sysmon-label">Desktop bridge</span><span class="atlas-sysmon-value">—</span></div>
         <div class="atlas-sysmon-row" id="atlas-sysmon-backend"><span class="atlas-sysmon-label">Backend metrics</span><span class="atlas-sysmon-value">—</span></div>
+        <div class="atlas-sysmon-row" id="atlas-sysmon-github"><span class="atlas-sysmon-label">GitHub code access</span><span class="atlas-sysmon-value">—</span></div>
       </div>
       <p class="atlas-sysmon-note">CPU / RAM connect automatically when the backend exposes <code>/api/atlas/system/metrics</code>.</p>
     </div>
@@ -1260,17 +1261,24 @@
         <aside class="atlas-agent-inbox" id="atlas-agent-office-inbox" aria-label="Agent inbox"></aside>
         <main class="atlas-agent-office-main">
           <section class="atlas-agent-conversation" id="atlas-agent-office-conversation" aria-label="Message agent">
-            <h3 class="atlas-agent-section-title">Conversation</h3>
+            <div class="atlas-agent-conversation-head">
+              <h3 class="atlas-agent-section-title">Conversation</h3>
+              <div class="atlas-agent-mode-toggle" role="group" aria-label="Conversation mode">
+                <button type="button" id="atlas-agent-mode-chat" class="atlas-agent-mode-btn is-active" data-mode="chat">Chat</button>
+                <button type="button" id="atlas-agent-mode-report" class="atlas-agent-mode-btn" data-mode="report">Report</button>
+              </div>
+            </div>
+            <div id="atlas-agent-chat-log" class="atlas-agent-chat-log" aria-live="polite"></div>
             <p id="atlas-agent-message-capture-status" class="atlas-agent-message-capture-status hidden" aria-live="polite"></p>
             <textarea id="atlas-agent-message-input" class="atlas-agent-message-input" rows="3" placeholder="Message this agent…"></textarea>
             <div class="atlas-agent-message-controls">
-              <label class="atlas-agent-message-field">
+              <label class="atlas-agent-message-field atlas-agent-report-only">
                 <span>Project</span>
                 <select id="atlas-agent-message-project" class="atlas-agent-message-select">
                   <option value="">General (no project)</option>
                 </select>
               </label>
-              <label class="atlas-agent-message-field">
+              <label class="atlas-agent-message-field atlas-agent-report-only">
                 <span>Report type</span>
                 <select id="atlas-agent-message-type" class="atlas-agent-message-select"></select>
               </label>
