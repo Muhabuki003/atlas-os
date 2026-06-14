@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "approval_required": true,
+  "stages": [
+    "research",
+    "business",
+    "architect",
+    "developer",
+    "marketing"
+  ],
+  "future_channels": {
+    "sms": false,
+    "whatsapp": false,
+    "email": false
+  },
+  "rules": [
+    "Agents generate reports only unless approved.",
+    "No posting, payments, or code execution without approval.",
+    "Business goal is to help the user make progress ethically and practically."
+  ]
+}

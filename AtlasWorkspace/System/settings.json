@@ -1,0 +1,11 @@
+{
+  "workspacePath": "./AtlasWorkspace",
+  "workspaceMode": "managed",
+  "defaultProjectStorage": "managed",
+  "setupComplete": true,
+  "userName": "Adrien",
+  "buildingType": "personal",
+  "aiProvider": "openai",
+  "aiModel": "deepseek-chat",
+  "firstOfficeId": "bukimind-main"
+}

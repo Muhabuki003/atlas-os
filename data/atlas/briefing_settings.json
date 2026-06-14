@@ -1,0 +1,8 @@
+{
+  "speak_on_home_start": false,
+  "briefing_style": "short",
+  "include_finance": true,
+  "include_projects": true,
+  "include_agents": true,
+  "focus_mode": "dynamic"
+}
