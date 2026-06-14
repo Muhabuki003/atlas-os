@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS = {
   interruption_enabled: true,
   follow_up_timeout_ms: 30000,
   silence_submit_delay_ms: 2000,
-  atlas_cursor_effects: true,
+  atlas_cursor_effects: false,
 };
 
 let _deps = {};

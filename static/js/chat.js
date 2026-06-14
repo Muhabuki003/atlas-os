@@ -900,18 +900,15 @@ import { createStreamRenderer } from './streamingRenderer.js';
       
       const modelName = sessionModule.getCurrentModel() || null;
 
-      let loadingText = 'Initializing...';
-
+      let loadingText = '...';
+    
       if (el('web-toggle').checked && !_isAgent) {
         const _searchLabel = searchModule ? searchModule.getProviderLabel() : 'web';
-        loadingText = `Searching via ${_searchLabel}...<br>
-                       <span style="font-size: 0.9em; opacity: 0.8;">
-                       Query: "${msg.substring(0, 50)}${msg.length > 50 ? '...' : ''}"<br>
-                       Fetching top results...</span>`;
+        loadingText = 'Searching...';
       } else if (el('research-toggle').checked) {
-        loadingText = 'Deep research mode active...';
+        loadingText = 'Researching...';
       } else {
-        loadingText = 'Processing request...';
+        loadingText = '...';
       }
 
       var roleLabel = _modelRouteLabel(modelName, modelName);
@@ -933,13 +930,11 @@ import { createStreamRenderer } from './streamingRenderer.js';
       
       // Update spinner message based on mode
       if (el('web-toggle').checked && !_isAgent) {
-        spinner.updateMessage('Searching web with ' + (searchModule ? searchModule.getProviderLabel() : 'SearXNG'));
-        setTimeout(() => spinner.updateMessage('Processing results'), 1500);
+        spinner.updateMessage('Searching');
       } else if (el('research-toggle').checked) {
-        spinner.updateMessage('Researching');
-        setTimeout(() => spinner.updateMessage('Analyzing sources'), 1500);
+        spinner.updateMessage('');
       } else {
-        spinner.updateMessage('Processing request');
+        spinner.updateMessage('');
         const endpointUrlForProbe = sessionModule.getCurrentEndpointUrl ? sessionModule.getCurrentEndpointUrl() : null;
         if (endpointUrlForProbe && modelName) {
           processingProbeTimer = setTimeout(async () => {

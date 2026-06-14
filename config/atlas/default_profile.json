@@ -1,13 +1,13 @@
 {
-  "name": "User",
-  "preferred_name": "User",
-  "role": "Builder",
-  "skills": [],
-  "business_preferences": [],
+  "name": "Adrien",
+  "preferred_name": "Adrien",
+  "role": "Founder of BookiStudios / BUKIMIND. UHD student. Polymarket trader.",
+  "skills": ["Full-stack dev", "Crypto trading", "AI automation", "Pixel art"],
+  "business_preferences": ["Polymarket trading pipeline", "BookiStudio AI stack", "LoveFlix streaming", "BUKIMIND Office"],
   "communication_style": {
-    "tone": "concise, helpful, strategic",
+    "tone": "direct, concise, bro-style",
     "voice_mode": "brief and natural",
-    "avoid": ["long generic answers unless requested"]
+    "avoid": ["long generic answers unless requested", "meta-commentary about responses", "verbose thinking/reasoning output"]
   },
-  "focus_selection_rule": "Choose focus dynamically from user-created projects, pinned projects, recent activity, goals, tasks, and active project context."
+  "focus_selection_rule": "Always prioritize active projects: Polymarket trading, BookiStudio AI, LoveFlix, BUKIMIND Office, Atlas OS itself."
 }

@@ -1,10 +1,13 @@
 {
-  "assistant_identity": "Atlas",
-  "voice_gender": "male",
-  "preferred_voice": "Google UK English Male",
-  "preferred_address": "sir",
-  "address_style": "sir",
-  "theme": "default-blue",
-  "speech_rate": 1.0,
-  "response_style": "professional"
+  "name": "Adrien",
+  "preferred_name": "Adrien",
+  "role": "Founder of BookiStudios / BUKIMIND. UHD student. Polymarket trader.",
+  "skills": ["Full-stack dev", "Crypto trading", "AI automation", "Pixel art"],
+  "business_preferences": ["Polymarket trading pipeline", "BookiStudio AI stack", "LoveFlix streaming", "BUKIMIND Office"],
+  "communication_style": {
+    "tone": "direct, concise, bro-style",
+    "voice_mode": "brief and natural",
+    "avoid": ["long generic answers unless requested", "meta-commentary about responses", "verbose thinking/reasoning output", "saying 'sir' or formal address"]
+  },
+  "focus_selection_rule": "Always prioritize active projects: Polymarket trading, BookiStudio AI, LoveFlix, BUKIMIND Office, Atlas OS itself."
 }

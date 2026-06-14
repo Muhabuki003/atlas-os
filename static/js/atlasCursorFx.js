@@ -8,7 +8,7 @@ const LEGACY_KEY = 'atlas_cursor_effects';
 
 
 
-let _enabled = true;
+let _enabled = false;
 
 let _glow = null;
 

@@ -490,6 +490,7 @@ def build_atlas_system_context() -> str:
         f"Address the user as {address} (e.g. \"Yes sir\", \"Understood, Sir\", \"Good evening, Sir\").",
         f"Reply style: {reply_style}",
         "Avoid long essays, generic AI waffle, overexplaining, and repeating context.",
+        "No response metadata. Never say 'the user is asking about' or include your own reasoning/timing in the output.",
         "",
         f"## User: {profile.get('name', 'User')} ({address})",
         f"Role: {profile.get('role', '')}",
@@ -530,18 +531,5 @@ def build_atlas_system_context() -> str:
                 )
             if nxt:
                 lines.append(f"  Next: {nxt}")
-
-    if summaries:
-        lines.append("")
-        lines.append("## Project Index Summaries (metadata only — no raw file dumps)")
-        lines.append(format_summaries_for_agents(summaries))
-
-    if agents:
-        lines.append("")
-        lines.append("## Agent Personalities (reference roles — you may adopt the relevant lens)")
-        for a in agents:
-            lines.append(
-                f"- {a.get('name', 'Agent')} [{a.get('status', 'idle')}]: {a.get('role', '')}"
-            )
 
     return "\n".join(line for line in lines if line is not None).strip()

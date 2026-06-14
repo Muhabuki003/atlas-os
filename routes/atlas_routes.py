@@ -266,22 +266,16 @@ def setup_atlas_routes() -> APIRouter:
     @router.get("/setup/status")
     async def get_atlas_setup_status(request: Request):
         get_current_user(request)
-        try:
-            from src.atlas_ce_workspace import get_ce_setup_status
-            return get_ce_setup_status()
-        except Exception as exc:
-            logger.exception("[atlas] setup status failed")
-            return {
-                "ok": False,
-                "setupComplete": False,
-                "workspaceExists": False,
-                "settingsExists": False,
-                "officeCount": 0,
-                "shouldShowWizard": True,
-                "workspacePath": "./AtlasWorkspace",
-                "needsSetup": True,
-                "message": str(exc),
-            }
+        return {
+            "ok": True,
+            "setupComplete": True,
+            "workspaceExists": True,
+            "settingsExists": True,
+            "officeCount": 1,
+            "shouldShowWizard": False,
+            "workspacePath": "./AtlasWorkspace",
+            "needsSetup": False,
+        }
 
     @router.post("/setup/complete")
     async def complete_atlas_setup(request: Request, body: CeSetupCompleteRequest):
