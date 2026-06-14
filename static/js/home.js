@@ -347,7 +347,7 @@ export function bootAtlasHome() {
   window.atlasHomeConversation?.onHomeShown?.();
 
   try {
-    initAtlasGraph({ onNodeClick: (action) => openAtlasModal(action), projects: _projects });
+    initAtlasGraph({ onNodeClick: (action) => toggleAtlasModal(action), projects: _projects });
     initAtlasPowerLinks();
     void atlasShellModals.restoreSessionModals();
   } catch (err) {
@@ -483,6 +483,16 @@ export async function openAtlasModal(id) {
   window.atlasVoiceService?.onRouteChange?.('home');
   document.title = 'Atlas OS';
   return atlasShellModals.openShellModal(id);
+}
+
+// Clicking a globe node toggles its window: open if closed, dismiss if already
+// open. Voice/explicit navigation still uses openAtlasModal (open-only).
+export async function toggleAtlasModal(id) {
+  _active = true;
+  _ensureHomeVisible();
+  window.atlasVoiceService?.onRouteChange?.('home');
+  document.title = 'Atlas OS';
+  return atlasShellModals.toggleShellModal(id);
 }
 
 export function getAtlasAgents() {

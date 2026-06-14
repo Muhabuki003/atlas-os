@@ -216,6 +216,16 @@ def setup_atlas_routes() -> APIRouter:
             logger.exception("[atlas] profile failed: %s", exc)
             return {"identity": {}, "profile": {}}
 
+    @router.get("/system/metrics")
+    async def get_atlas_system_metrics(request: Request):
+        get_current_user(request)
+        try:
+            from src.atlas_system_metrics import get_system_metrics
+            return get_system_metrics()
+        except Exception as exc:
+            logger.warning("[atlas] system metrics failed: %s", exc)
+            return {"ok": False, "error": "metrics unavailable"}
+
     @router.get("/workspace")
     async def get_atlas_workspace(request: Request):
         get_current_user(request)
