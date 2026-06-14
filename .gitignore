@@ -1,11 +1,23 @@
 # Environment variables (DO NOT COMMIT)
-# Copy .env.example to .env and fill in your values
 .env
 *.pem
 *.key
+
+# Python
 __pycache__/
 *.pyc
 .DS_Store
+
+# Data / DB (local state, not for repo)
 data/*.db
 data/*.sqlite
+data/*.json
+data/fastembed_cache/
+data/huggingface/
+data/atlas/
+data/auth.json
+data/app_key
 local_data/
+atlas_system.db
+AtlasWorkspace/
+*.pages.dev
