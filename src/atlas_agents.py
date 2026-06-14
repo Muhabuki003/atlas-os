@@ -947,6 +947,109 @@ async def run_agent_message(
     }
 
 
+async def _call_llm_messages(
+    owner: Optional[str],
+    system: str,
+    messages: List[Dict[str, str]],
+    *,
+    temperature: float = 0.5,
+    max_tokens: int = 1800,
+) -> Optional[str]:
+    """LLM call that preserves a multi-turn conversation (for agent chat)."""
+    url, model, headers = _resolve_llm(owner)
+    if not url or not model:
+        return None
+    try:
+        from src.llm_core import llm_call_async
+        raw = await llm_call_async(
+            url=url,
+            model=model,
+            messages=[{"role": "system", "content": system}] + messages,
+            headers=headers,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=90,
+            max_retries=1,
+        )
+        body = _strip_thinking(raw or "")
+        return body if body.strip() else None
+    except Exception as exc:
+        logger.warning("[atlas-agents] chat LLM call failed: %s", exc)
+        return None
+
+
+def _agent_persona(agent_id: str, agent_name: Optional[str], agent_role: Optional[str]) -> str:
+    """System persona for a chat agent. Council agents use their fixed prompt;
+    office agents get one built from their name/role metadata."""
+    base = _AGENT_PROMPTS.get(agent_id)
+    if base:
+        return base
+    name = agent_name or "Agent"
+    role = agent_role or "an Atlas OS agent"
+    return (
+        f"You are {name}, {role}, working inside Atlas OS. "
+        "You are conversational, concise, and action-oriented. Hold a normal "
+        "back-and-forth dialogue with the user, remembering everything earlier "
+        "in this conversation. Ask a clarifying question when you genuinely need "
+        "one, otherwise give a direct, useful answer in your area of expertise."
+    )
+
+
+async def run_agent_chat(
+    agent_id: str,
+    message: str,
+    *,
+    owner: Optional[str] = None,
+    agent_name: Optional[str] = None,
+    agent_role: Optional[str] = None,
+    thread_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Conversational chat with an agent, with persistent per-agent memory.
+
+    Unlike ``run_agent_message`` (which produces a one-shot report), this keeps
+    a durable thread so the user can actually "speak to" an agent and be
+    remembered. Works for both council agents and custom office agents.
+    """
+    from src.atlas_threads import append_message, recent_turns
+
+    agent_key = (agent_id or "").strip().lower() or "atlas"
+    tid = (thread_id or agent_key).strip().lower()
+    text = (message or "").strip()
+    if not text:
+        return {"ok": False, "message": "Empty message."}
+
+    if not agent_name:
+        agent = next((a for a in load_agents() if a.get("id") == agent_key), None)
+        if agent:
+            agent_name = agent.get("name")
+            agent_role = agent_role or agent.get("role") or agent.get("jobTitle")
+
+    persona = _agent_persona(agent_key, agent_name, agent_role)
+    context = build_atlas_system_context()
+    system = f"{context}\n\n{persona}"
+
+    append_message(tid, "user", text)
+    history = recent_turns(tid)
+
+    reply = await _call_llm_messages(owner, system, history)
+    used_llm = reply is not None
+    if not reply:
+        reply = (
+            f"{agent_name or 'The agent'} is offline right now — no LLM endpoint "
+            "is reachable. Your message was saved to this conversation and will "
+            "have full context when the model is available again."
+        )
+
+    stored = append_message(tid, "assistant", reply, agent=agent_key, used_llm=used_llm)
+    return {
+        "ok": True,
+        "thread_id": tid,
+        "reply": reply,
+        "message": stored,
+        "used_llm": used_llm,
+    }
+
+
 async def run_agent_action(
     agent_id: str,
     action: str,
