@@ -23,6 +23,8 @@ let _fps = 0;
 let _backendState = 'unknown'; // unknown | available | unavailable
 let _backendMetrics = null;
 let _lastBackendTry = 0;
+let _githubState = 'unknown'; // unknown | connected | disconnected
+let _lastGithubTry = 0;
 
 function _el(id) {
   return document.getElementById(id);
@@ -69,6 +71,20 @@ async function _pollBackend() {
   } catch (_) {
     _backendMetrics = null;
     _backendState = 'unavailable';
+  }
+}
+
+async function _pollGithub() {
+  // GitHub config rarely changes; poll once per backend-retry window.
+  const now = Date.now();
+  if (_githubState !== 'unknown' && now - _lastGithubTry < BACKEND_RETRY_MS) return;
+  _lastGithubTry = now;
+  try {
+    const res = await fetch('/api/atlas/github/status', { credentials: 'same-origin' });
+    const data = await res.json();
+    _githubState = data && data.connected ? 'connected' : 'disconnected';
+  } catch (_) {
+    _githubState = 'disconnected';
   }
 }
 
@@ -134,6 +150,10 @@ function _render() {
     _setRow('atlas-sysmon-backend', _backendState === 'unknown' ? 'Checking…' : 'Not connected', _backendState === 'unknown' ? '' : 'na');
   }
 
+  if (_githubState === 'connected') _setRow('atlas-sysmon-github', 'Connected', 'good');
+  else if (_githubState === 'disconnected') _setRow('atlas-sysmon-github', 'Not connected', 'na');
+  else _setRow('atlas-sysmon-github', 'Checking…', '');
+
   const modals = _activeModals();
   _setRow('atlas-sysmon-modals', modals.length ? `${modals.length} open — ${modals.join(', ')}` : 'None');
   _setRow('atlas-sysmon-voice', _voiceStatus());
@@ -148,9 +168,11 @@ export function startSystemMonitor() {
   _fpsWindowStart = 0;
   _raf = requestAnimationFrame(_fpsLoop);
   void _pollBackend();
+  void _pollGithub();
   _timer = window.setInterval(() => {
     if (document.hidden) return;
     void _pollBackend();
+    void _pollGithub();
     _render();
   }, REFRESH_MS);
 }

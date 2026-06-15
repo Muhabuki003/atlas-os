@@ -41567,6 +41567,81 @@ body.atlas-os .atlas-assistant-main {
   border-bottom: 1px solid rgba(80, 200, 255, 0.1);
 }
 
+.atlas-agent-conversation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.atlas-agent-mode-toggle {
+  display: inline-flex;
+  border: 1px solid rgba(80, 200, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.atlas-agent-mode-btn {
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.atlas-agent-mode-btn.is-active {
+  background: rgba(80, 200, 255, 0.18);
+  opacity: 1;
+}
+
+.atlas-agent-chat-log {
+  max-height: 320px;
+  min-height: 80px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 4px;
+  margin: 8px 0;
+}
+
+.atlas-agent-chat-empty {
+  opacity: 0.5;
+  font-size: 12px;
+  margin: 6px 2px;
+}
+
+.atlas-agent-chat-msg {
+  display: flex;
+}
+
+.atlas-agent-chat-msg--user {
+  justify-content: flex-end;
+}
+
+.atlas-agent-chat-bubble {
+  max-width: 82%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.atlas-agent-chat-msg--user .atlas-agent-chat-bubble {
+  background: rgba(80, 200, 255, 0.18);
+  border: 1px solid rgba(80, 200, 255, 0.25);
+}
+
+.atlas-agent-chat-msg--agent .atlas-agent-chat-bubble {
+  background: rgba(8, 18, 32, 0.75);
+  border: 1px solid rgba(80, 200, 255, 0.12);
+}
+
 .atlas-agent-message-input {
   width: 100%;
   box-sizing: border-box;

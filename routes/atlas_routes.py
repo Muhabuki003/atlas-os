@@ -216,6 +216,82 @@ def setup_atlas_routes() -> APIRouter:
             logger.exception("[atlas] profile failed: %s", exc)
             return {"identity": {}, "profile": {}}
 
+    @router.get("/system/metrics")
+    async def get_atlas_system_metrics(request: Request):
+        get_current_user(request)
+        try:
+            from src.atlas_system_metrics import get_system_metrics
+            return get_system_metrics()
+        except Exception as exc:
+            logger.warning("[atlas] system metrics failed: %s", exc)
+            return {"ok": False, "error": "metrics unavailable"}
+
+    @router.post("/agents/{agent_id}/chat")
+    async def agent_chat(agent_id: str, request: Request):
+        owner = get_current_user(request)
+        body = await request.json()
+        from src.atlas_agents import run_agent_chat
+        return await run_agent_chat(
+            agent_id,
+            (body or {}).get("message", ""),
+            owner=owner,
+            agent_name=(body or {}).get("agent_name"),
+            agent_role=(body or {}).get("agent_role"),
+            thread_id=(body or {}).get("thread_id"),
+        )
+
+    @router.get("/agents/{agent_id}/thread")
+    async def agent_thread(agent_id: str, request: Request):
+        get_current_user(request)
+        from src.atlas_threads import load_thread
+        return {"ok": True, "thread": load_thread(agent_id)}
+
+    @router.delete("/agents/{agent_id}/thread")
+    async def agent_thread_clear(agent_id: str, request: Request):
+        get_current_user(request)
+        from src.atlas_threads import clear_thread
+        clear_thread(agent_id)
+        return {"ok": True}
+
+    @router.get("/github/status")
+    async def github_status(request: Request):
+        get_current_user(request)
+        from src.atlas_github import is_configured
+        return {"ok": True, "connected": is_configured()}
+
+    @router.get("/github/repos")
+    async def github_repos(request: Request):
+        get_current_user(request)
+        from src.atlas_github import list_repos
+        return await list_repos()
+
+    @router.get("/github/file")
+    async def github_file(request: Request, repo: str, path: str, ref: Optional[str] = None):
+        get_current_user(request)
+        from src.atlas_github import get_file
+        return await get_file(repo, path, ref=ref)
+
+    @router.get("/github/dir")
+    async def github_dir(request: Request, repo: str, path: str = ""):
+        get_current_user(request)
+        from src.atlas_github import list_dir
+        return await list_dir(repo, path)
+
+    @router.post("/github/propose")
+    async def github_propose(request: Request):
+        get_current_user(request)
+        body = await request.json() or {}
+        from src.atlas_github import propose_change
+        return await propose_change(
+            body.get("repo", ""),
+            body.get("path", ""),
+            body.get("content", ""),
+            title=body.get("title") or "Atlas proposed change",
+            body=body.get("body", ""),
+            branch=body.get("branch"),
+            base=body.get("base"),
+        )
+
     @router.get("/workspace")
     async def get_atlas_workspace(request: Request):
         get_current_user(request)

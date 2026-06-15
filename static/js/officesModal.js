@@ -330,12 +330,16 @@ async function _syncFromWorkspace() {
   return false;
 }
 
+function _renderNow() {
+  if (!_activeOfficeId && _offices.length) _activeOfficeId = _offices[0].id;
+  _renderOfficeList();
+  _renderOfficeDetail();
+}
+
 export function renderOfficesModal() {
   void _syncFromWorkspace().then((synced) => {
     if (!synced) _load();
-    if (!_activeOfficeId && _offices.length) _activeOfficeId = _offices[0].id;
-    _renderOfficeList();
-    _renderOfficeDetail();
+    _renderNow();
   });
 }
 
@@ -383,7 +387,6 @@ export async function createOffice(name, description = '') {
     });
     const data = await res.json();
     if (data.ok && data.office) {
-      _load();
       const remote = data.office;
       const office = {
         id: remote.id,
@@ -397,7 +400,10 @@ export async function createOffice(name, description = '') {
       _offices.push(office);
       _activeOfficeId = office.id;
       _save();
-      renderOfficesModal();
+      // Render synchronously from in-memory state. Do NOT re-sync here: a
+      // stale/empty workspace response would clobber the office we just made
+      // and bounce the modal back to the "Create your first office" screen.
+      _renderNow();
       return office;
     }
   } catch (_) {}
@@ -413,7 +419,7 @@ export async function createOffice(name, description = '') {
   _offices.push(office);
   _activeOfficeId = office.id;
   _save();
-  renderOfficesModal();
+  _renderNow();
   return office;
 }
 
@@ -593,6 +599,24 @@ export function getOffices() {
 
 function _handleAction(action, dataset) {
   const { officeId, deptId, agentId, subagentId } = dataset;
+
+  if (action === 'open-agent' || action === 'open-subagent') {
+    const office = _getOffice(officeId);
+    const dept = office?.departments?.find((d) => d.id === deptId);
+    const agent = dept?.agents?.find((a) => a.id === agentId);
+    const target = action === 'open-subagent'
+      ? agent?.subAgents?.find((s) => s.id === subagentId)
+      : agent;
+    if (!target) return;
+    import('./agentsOffice.js').then((m) => {
+      (m.openAgentChat || m.default?.openAgentChat)?.({
+        id: target.id,
+        name: target.name,
+        role: target.jobTitle || target.title || target.role || '',
+      });
+    }).catch((err) => console.error('[atlas] open agent chat failed:', err));
+    return;
+  }
 
   if (action === 'edit-office') {
     const o = _getOffice(officeId);

@@ -66,6 +66,7 @@ let _workingAgents = new Set();
 let _activeReportId = null;
 let _activeAgentOfficeId = null;
 let _messageCaptureActive = false;
+let _chatMode = true; // true = conversational chat (memory), false = report
 let _linesRaf = 0;
 let _linesRunning = false;
 
@@ -684,12 +685,54 @@ function _openAgentOffice(agentId) {
     currentSelectionLabel: agent.name,
   });
 
+  _setChatMode(_chatMode);
+  if (_chatMode) void _loadAgentThread(agentId);
+
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
 }
 
 export function openAgent(agentId) {
   _openAgentOffice(agentId);
+}
+
+/**
+ * Open the Agent Office window in chat mode for any agent — including custom
+ * office agents that aren't in the backend `_agents` list. Used by the Offices
+ * modal's "Open" button so created agents are immediately chattable.
+ */
+export function openAgentChat({ id, name, role } = {}) {
+  if (!id) return;
+  _activeAgentOfficeId = id;
+  const modal = _el('atlas-agent-office-modal');
+  if (!modal) return;
+
+  const known = _agents.find((a) => a.id === id);
+  const deptEl = _el('atlas-agent-office-dept');
+  const titleEl = _el('atlas-agent-office-title');
+  const roleEl = _el('atlas-agent-office-role');
+  if (deptEl) deptEl.textContent = known ? _deptName(known) : 'Office agent';
+  if (titleEl) titleEl.textContent = name || known?.name || 'Agent';
+  if (roleEl) roleEl.textContent = role || known?.role || known?.jobTitle || '';
+
+  // Office agents have no backend inbox/reports — keep those areas empty.
+  const inbox = _el('atlas-agent-office-inbox');
+  if (inbox && !known) inbox.innerHTML = '';
+  const reports = _el('atlas-agent-office-reports');
+  if (reports && !known) reports.innerHTML = '';
+
+  AtlasVoiceContext.set({
+    currentModal: 'agent_office',
+    currentAgentId: id,
+    currentAgentName: name || known?.name,
+    currentSelectionType: 'agent',
+    currentSelectionLabel: name || known?.name,
+  });
+
+  _setChatMode(true);
+  void _loadAgentThread(id);
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
 }
 
 function _setCaptureStatus(text, visible = true) {
@@ -879,7 +922,96 @@ export async function closeActiveModal() {
   return false;
 }
 
+function _setChatMode(on) {
+  _chatMode = !!on;
+  const conv = _el('atlas-agent-office-conversation');
+  if (conv) conv.classList.toggle('atlas-agent-conversation--report', !_chatMode);
+  _el('atlas-agent-mode-chat')?.classList.toggle('is-active', _chatMode);
+  _el('atlas-agent-mode-report')?.classList.toggle('is-active', !_chatMode);
+  const log = _el('atlas-agent-chat-log');
+  if (log) log.classList.toggle('hidden', !_chatMode);
+  document.querySelectorAll('.atlas-agent-report-only').forEach((el) => {
+    el.classList.toggle('hidden', _chatMode);
+  });
+  const input = _el('atlas-agent-message-input');
+  if (input) input.placeholder = _chatMode ? 'Message this agent…' : 'Describe the report you want…';
+  if (_chatMode && _activeAgentOfficeId) void _loadAgentThread(_activeAgentOfficeId);
+}
+
+function _renderChatLog(messages) {
+  const log = _el('atlas-agent-chat-log');
+  if (!log) return;
+  if (!messages || !messages.length) {
+    log.innerHTML = '<p class="atlas-agent-chat-empty">No messages yet. Say hello — this agent remembers your conversation.</p>';
+    return;
+  }
+  log.innerHTML = messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => `
+      <div class="atlas-agent-chat-msg atlas-agent-chat-msg--${m.role === 'user' ? 'user' : 'agent'}">
+        <div class="atlas-agent-chat-bubble">${_esc(m.content || '')}</div>
+      </div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+async function _loadAgentThread(agentId) {
+  try {
+    const res = await fetch(`/api/atlas/agents/${agentId}/thread`, { credentials: 'same-origin' });
+    const data = await res.json();
+    _renderChatLog(data?.thread?.messages || []);
+  } catch (_) {
+    _renderChatLog([]);
+  }
+}
+
+async function _sendChatMessage() {
+  if (!_activeAgentOfficeId) return { ok: false, message: 'No agent selected.' };
+  const input = _el('atlas-agent-message-input');
+  const message = (input?.value || '').trim();
+  if (!message) {
+    if (_deps.showToast) _deps.showToast('Enter a message for the agent');
+    return { ok: false, message: 'No message to send.' };
+  }
+  const agent = _agents.find((a) => a.id === _activeAgentOfficeId);
+  const log = _el('atlas-agent-chat-log');
+  // Optimistically show the user's message + a thinking placeholder.
+  const existing = log && !log.querySelector('.atlas-agent-chat-empty')
+    ? Array.from(log.querySelectorAll('.atlas-agent-chat-msg')).map((el) => ({
+        role: el.classList.contains('atlas-agent-chat-msg--user') ? 'user' : 'assistant',
+        content: el.querySelector('.atlas-agent-chat-bubble')?.textContent || '',
+      }))
+    : [];
+  _renderChatLog([...existing, { role: 'user', content: message }, { role: 'assistant', content: '…' }]);
+  if (input) { input.value = ''; delete input.dataset.touched; }
+  const sendBtn = _el('atlas-agent-message-send');
+  if (sendBtn) sendBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/atlas/agents/${_activeAgentOfficeId}/chat`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        agent_name: agent?.name,
+        agent_role: agent?.role || agent?.jobTitle,
+      }),
+    });
+    const data = await res.json();
+    await _loadAgentThread(_activeAgentOfficeId);
+    if (data.ok && !data.used_llm && _deps.showToast) _deps.showToast('Saved — agent LLM offline');
+    return { ok: !!data.ok, message: data.reply || 'No reply.' };
+  } catch (_) {
+    if (_deps.showToast) _deps.showToast('Failed to reach agent');
+    await _loadAgentThread(_activeAgentOfficeId);
+    return { ok: false, message: 'Failed to send.' };
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    exitMessageCapture();
+  }
+}
+
 async function _sendAgentMessage() {
+  if (_chatMode) return _sendChatMessage();
   if (!_activeAgentOfficeId) return { ok: false, message: 'No agent selected.' };
   const input = _el('atlas-agent-message-input');
   const message = (input?.value || '').trim();
@@ -1165,8 +1297,16 @@ function _bindEvents() {
 
   _el('atlas-agent-message-send')?.addEventListener('click', () => { void _sendAgentMessage(); });
 
+  _el('atlas-agent-mode-chat')?.addEventListener('click', () => _setChatMode(true));
+  _el('atlas-agent-mode-report')?.addEventListener('click', () => _setChatMode(false));
+
   _el('atlas-agent-message-input')?.addEventListener('keydown', (e) => {
+    const plainEnter = e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      void _sendAgentMessage();
+    } else if (_chatMode && plainEnter) {
+      // In chat mode plain Enter sends; Shift+Enter inserts a newline.
       e.preventDefault();
       void _sendAgentMessage();
     }
@@ -1220,6 +1360,7 @@ const agentsOfficeModule = {
   openReport,
   openReportById,
   openAgent,
+  openAgentChat,
   focusAgentMessage,
   enterMessageCapture,
   exitMessageCapture,
@@ -1238,6 +1379,7 @@ const agentsOfficeModule = {
 
 window.AtlasAgentsUI = {
   openAgent,
+  openAgentChat,
   focusAgentMessage,
   enterMessageCapture,
   exitMessageCapture,

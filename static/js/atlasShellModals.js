@@ -524,6 +524,31 @@ export async function openShellModal(id) {
   return false;
 }
 
+/** Resolve a node/voice action id to the canonical key the registry tracks. */
+function _resolveModalKey(id) {
+  let key = String(id || '').toLowerCase().trim();
+  if (!key) return '';
+  if (MODAL_ALIASES[key]) key = MODAL_ALIASES[key];
+  if (key.startsWith('finance:')) return 'finance';
+  if (key.startsWith('office:') || key.startsWith('dept:') || key.startsWith('agent:') || key.startsWith('subagent:')) return 'offices';
+  if (key.startsWith('task:')) return 'tasks';
+  if (key.startsWith('project:')) return key.slice(8) ? 'project_hq' : 'projects';
+  return key;
+}
+
+/**
+ * Open the modal for `id`, or close it if its window is already open.
+ * Used by the globe nodes so clicking a node a second time dismisses the
+ * floating window (e.g. click Reminders again to put it away).
+ */
+export async function toggleShellModal(id) {
+  const key = _resolveModalKey(id);
+  if (key && isModalOpen(key)) {
+    return closeShellModal(key);
+  }
+  return openShellModal(id);
+}
+
 function _renderToolsGrid() {
   const grid = _el('atlas-tools-grid');
   if (!grid || grid.dataset.rendered) return;
@@ -633,6 +658,7 @@ export function initAtlasShellModals(deps = {}) {
 const atlasShellModals = {
   initAtlasShellModals,
   openShellModal,
+  toggleShellModal,
   closeShellModal,
   closeAllModals,
   restoreSessionModals,
