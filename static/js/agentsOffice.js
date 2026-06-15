@@ -696,6 +696,45 @@ export function openAgent(agentId) {
   _openAgentOffice(agentId);
 }
 
+/**
+ * Open the Agent Office window in chat mode for any agent — including custom
+ * office agents that aren't in the backend `_agents` list. Used by the Offices
+ * modal's "Open" button so created agents are immediately chattable.
+ */
+export function openAgentChat({ id, name, role } = {}) {
+  if (!id) return;
+  _activeAgentOfficeId = id;
+  const modal = _el('atlas-agent-office-modal');
+  if (!modal) return;
+
+  const known = _agents.find((a) => a.id === id);
+  const deptEl = _el('atlas-agent-office-dept');
+  const titleEl = _el('atlas-agent-office-title');
+  const roleEl = _el('atlas-agent-office-role');
+  if (deptEl) deptEl.textContent = known ? _deptName(known) : 'Office agent';
+  if (titleEl) titleEl.textContent = name || known?.name || 'Agent';
+  if (roleEl) roleEl.textContent = role || known?.role || known?.jobTitle || '';
+
+  // Office agents have no backend inbox/reports — keep those areas empty.
+  const inbox = _el('atlas-agent-office-inbox');
+  if (inbox && !known) inbox.innerHTML = '';
+  const reports = _el('atlas-agent-office-reports');
+  if (reports && !known) reports.innerHTML = '';
+
+  AtlasVoiceContext.set({
+    currentModal: 'agent_office',
+    currentAgentId: id,
+    currentAgentName: name || known?.name,
+    currentSelectionType: 'agent',
+    currentSelectionLabel: name || known?.name,
+  });
+
+  _setChatMode(true);
+  void _loadAgentThread(id);
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
 function _setCaptureStatus(text, visible = true) {
   const status = _el('atlas-agent-message-capture-status');
   if (!status) return;
@@ -1321,6 +1360,7 @@ const agentsOfficeModule = {
   openReport,
   openReportById,
   openAgent,
+  openAgentChat,
   focusAgentMessage,
   enterMessageCapture,
   exitMessageCapture,
@@ -1339,6 +1379,7 @@ const agentsOfficeModule = {
 
 window.AtlasAgentsUI = {
   openAgent,
+  openAgentChat,
   focusAgentMessage,
   enterMessageCapture,
   exitMessageCapture,

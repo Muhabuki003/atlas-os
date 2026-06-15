@@ -600,6 +600,24 @@ export function getOffices() {
 function _handleAction(action, dataset) {
   const { officeId, deptId, agentId, subagentId } = dataset;
 
+  if (action === 'open-agent' || action === 'open-subagent') {
+    const office = _getOffice(officeId);
+    const dept = office?.departments?.find((d) => d.id === deptId);
+    const agent = dept?.agents?.find((a) => a.id === agentId);
+    const target = action === 'open-subagent'
+      ? agent?.subAgents?.find((s) => s.id === subagentId)
+      : agent;
+    if (!target) return;
+    import('./agentsOffice.js').then((m) => {
+      (m.openAgentChat || m.default?.openAgentChat)?.({
+        id: target.id,
+        name: target.name,
+        role: target.jobTitle || target.title || target.role || '',
+      });
+    }).catch((err) => console.error('[atlas] open agent chat failed:', err));
+    return;
+  }
+
   if (action === 'edit-office') {
     const o = _getOffice(officeId);
     _showPrompt({
